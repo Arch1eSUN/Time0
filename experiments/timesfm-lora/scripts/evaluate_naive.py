@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from forecast_data import build_windows, count_windows_by_series, load_series_csv
@@ -32,6 +33,22 @@ def smape(actual: list[float], predicted: list[float]) -> float:
     return total / len(actual)
 
 
+def metric_report(actual: list[float], predicted: list[float]) -> dict[str, float]:
+    return {
+        "mae": mae(actual, predicted),
+        "smape": smape(actual, predicted),
+    }
+
+
+@dataclass
+class NaiveSeriesAccumulator:
+    windows: int = 0
+    last_actual: list[float] = field(default_factory=list)
+    last_predicted: list[float] = field(default_factory=list)
+    seasonal_actual: list[float] = field(default_factory=list)
+    seasonal_predicted: list[float] = field(default_factory=list)
+
+
 def main() -> None:
     args = parse_args()
     grouped = load_series_csv(Path(args.csv), field=args.field)
@@ -49,12 +66,18 @@ def main() -> None:
     last_predicted: list[float] = []
     seasonal_actual: list[float] = []
     seasonal_predicted: list[float] = []
+    per_series: dict[str, NaiveSeriesAccumulator] = {}
 
     for window in windows:
+        series_metrics = per_series.setdefault(window.series_id, NaiveSeriesAccumulator())
+        series_metrics.windows += 1
+
         last_value = window.past[-1]
         for actual in window.future:
             last_actual.append(actual)
             last_predicted.append(last_value)
+            series_metrics.last_actual.append(actual)
+            series_metrics.last_predicted.append(last_value)
 
         seasonal_source = window.past[-args.seasonal_lag :] if len(window.past) >= args.seasonal_lag else window.past
         seasonal_values = list(seasonal_source)
@@ -63,6 +86,19 @@ def main() -> None:
         for actual, predicted in zip(window.future, seasonal_values[: len(window.future)]):
             seasonal_actual.append(actual)
             seasonal_predicted.append(predicted)
+            series_metrics.seasonal_actual.append(actual)
+            series_metrics.seasonal_predicted.append(predicted)
+
+    per_series_report = {}
+    for series_id, values in sorted(per_series.items()):
+        per_series_report[series_id] = {
+            "windows": values.windows,
+            "last_value": metric_report(values.last_actual, values.last_predicted),
+            "seasonal_naive": {
+                "lag": args.seasonal_lag,
+                **metric_report(values.seasonal_actual, values.seasonal_predicted),
+            },
+        }
 
     report = {
         "field": args.field,
@@ -78,9 +114,9 @@ def main() -> None:
         },
         "seasonal_naive": {
             "lag": args.seasonal_lag,
-            "mae": mae(seasonal_actual, seasonal_predicted),
-            "smape": smape(seasonal_actual, seasonal_predicted),
+            **metric_report(seasonal_actual, seasonal_predicted),
         },
+        "per_series": per_series_report,
     }
 
     output = Path(args.output)

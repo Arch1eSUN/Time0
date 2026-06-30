@@ -92,11 +92,11 @@ Stop a training direction when any of these happens:
 | `market-macro-level-h20-r4-step200-balanced` | `level` | Failed Candidate Success | worse than TimesFM zero-shot on MAE and SMAPE |
 | `market-macro-level-h20-r4-step1000-balanced` | `level` | Failed Candidate Success | worse than step200; likely overfit or over-trained |
 | `market-macro-log-change-h20-r4-step200-balanced` | `log_change` | Partial signal, not success | MAE improves slightly, SMAPE regresses |
-| `market-macro-realized-vol-20-h20-r4-step200-*` | `realized_vol_20` | Rolling positive, not Promotion Ready | improves all 3 balanced cut-points, but average MAE gain is 1.52% and cut5500 gain is only 0.07% |
+| `market-macro-realized-vol-20-h20-r4-step200-*` | `realized_vol_20` | Rolling positive, not Promotion Ready | improves all 3 balanced cut-points, but average MAE gain is 1.52%; per-series average is negative for DEXUSEU and DGS10 |
 
 Recommendation: stop increasing steps on `level`. Treat `realized_vol_20` as
-the first clean target signal, but do not promote it until per-series metrics
-and stronger rolling improvements are available.
+the first clean target signal, but do not promote it until weak series and the
+`cut5500` regime are diagnosed.
 
 ## Promotion Requirements For Moirai
 
@@ -128,5 +128,6 @@ Reason:
 ```text
 The realized_vol_20 adapter family improved all 3 balanced rolling cut-points,
 but the average gain stayed below the 2% Promotion Ready threshold.
-The next decision needs per-series evidence before changing rank or publishing.
+Per-series evidence shows that cut5500 only improved 3 of 10 series.
+The next decision needs series/regime diagnosis before changing rank or publishing.
 ```

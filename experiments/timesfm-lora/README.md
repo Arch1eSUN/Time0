@@ -56,7 +56,7 @@ Current verdict:
 ```text
 level LoRA: failed candidate success; stop increasing steps for this target.
 log_change LoRA: partial signal; MAE improved slightly, SMAPE regressed.
-realized_vol_20 LoRA: positive rolling signal, but not promotion-ready.
+realized_vol_20 LoRA: positive rolling signal, but per-series evidence blocks promotion.
 ```
 
 ## Data Contract

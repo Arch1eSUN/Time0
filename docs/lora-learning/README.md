@@ -21,3 +21,4 @@ Each note should answer four questions:
 - [008 - When Does The Whole LoRA Project Stop?](./008-project-stop-and-release-strategy.md)
 - [009 - First Clean LoRA Win: Realized Volatility](./009-first-clean-lora-win-realized-vol.md)
 - [010 - Rolling Validation Without Data Leakage](./010-rolling-validation-no-leakage.md)
+- [011 - Per-Series Attribution: Where Did LoRA Help?](./011-per-series-attribution.md)

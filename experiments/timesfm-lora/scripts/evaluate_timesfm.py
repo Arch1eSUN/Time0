@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import torch
@@ -45,6 +46,20 @@ def smape(actual: list[float], predicted: list[float]) -> float:
     return total / len(actual)
 
 
+def metric_report(actual: list[float], predicted: list[float]) -> dict[str, float]:
+    return {
+        "mae": mae(actual, predicted),
+        "smape": smape(actual, predicted),
+    }
+
+
+@dataclass
+class SeriesAccumulator:
+    windows: int = 0
+    actual: list[float] = field(default_factory=list)
+    predicted: list[float] = field(default_factory=list)
+
+
 def main() -> None:
     args = parse_args()
     device = select_device(args.device)
@@ -71,6 +86,7 @@ def main() -> None:
 
     actual: list[float] = []
     predicted: list[float] = []
+    per_series: dict[str, SeriesAccumulator] = {}
     with torch.no_grad():
         for index, window in enumerate(windows, start=1):
             past = torch.tensor(window.past, dtype=torch.float32, device=device)
@@ -82,8 +98,19 @@ def main() -> None:
             forecast = output.mean_predictions[0, : args.horizon_len].detach().cpu().tolist()
             actual.extend(window.future)
             predicted.extend(float(value) for value in forecast)
+            series_metrics = per_series.setdefault(window.series_id, SeriesAccumulator())
+            series_metrics.windows += 1
+            series_metrics.actual.extend(window.future)
+            series_metrics.predicted.extend(float(value) for value in forecast)
             if index % 25 == 0:
                 print(f"[eval] windows={index}")
+
+    per_series_report = {}
+    for series_id, values in sorted(per_series.items()):
+        per_series_report[series_id] = {
+            "windows": values.windows,
+            **metric_report(values.actual, values.predicted),
+        }
 
     report = {
         "field": args.field,
@@ -95,8 +122,8 @@ def main() -> None:
         "skip_windows": args.skip_windows,
         "windows_by_series": count_windows_by_series(windows),
         "device": str(device),
-        "mae": mae(actual, predicted),
-        "smape": smape(actual, predicted),
+        **metric_report(actual, predicted),
+        "per_series": per_series_report,
     }
     output = Path(args.output)
     output.parent.mkdir(parents=True, exist_ok=True)
