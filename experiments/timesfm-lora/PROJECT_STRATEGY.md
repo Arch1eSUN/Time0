@@ -165,15 +165,17 @@ Before publishing:
 
 ## Immediate Next Step
 
-Run the next controlled target experiment:
+Validate the first clean target signal with rolling holdout cut-points:
 
 ```text
 field=realized_vol_20
 lora_r=4
 lora_alpha=8
 max_steps=200
-same context/horizon/split as previous runs
+same context/horizon/training recipe
+holdout cut-points: skip_windows=4000, 5000, 6000
 ```
 
-Stop that direction unless it beats TimesFM zero-shot on the primary holdout
-metric and shows no material secondary-metric regression.
+The first `realized_vol_20` adapter beat TimesFM zero-shot on one holdout. It is
+Candidate Success, not Promotion Ready. Promotion remains blocked until rolling
+holdout evidence shows stable improvement rather than one favorable segment.

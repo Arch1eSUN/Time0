@@ -92,9 +92,11 @@ Stop a training direction when any of these happens:
 | `market-macro-level-h20-r4-step200-balanced` | `level` | Failed Candidate Success | worse than TimesFM zero-shot on MAE and SMAPE |
 | `market-macro-level-h20-r4-step1000-balanced` | `level` | Failed Candidate Success | worse than step200; likely overfit or over-trained |
 | `market-macro-log-change-h20-r4-step200-balanced` | `log_change` | Partial signal, not success | MAE improves slightly, SMAPE regresses |
+| `market-macro-realized-vol-20-h20-r4-step200-balanced` | `realized_vol_20` | Candidate Success | MAE improves 1.23% and SMAPE improves 1.59% vs TimesFM zero-shot on one holdout |
 
-Recommendation: stop increasing steps on `level`. For `log_change`, run at most
-one repeat or one small capacity check, then prioritize `realized_vol_20`.
+Recommendation: stop increasing steps on `level`. Treat `realized_vol_20` as
+the first clean target signal, then run rolling holdout cut-points before any
+promotion or release decision.
 
 ## Promotion Requirements For Moirai
 
@@ -114,16 +116,16 @@ LoRA TimesFM, Moirai, or another model.
 
 ## Next Evaluation Direction
 
-Next target:
+Next validation:
 
 ```text
 field=realized_vol_20
+rolling holdout cut-points
 ```
 
 Reason:
 
 ```text
-It is closer to market/macro risk behavior than raw level.
-It avoids some near-zero SMAPE instability from log_change.
-It is more useful as a downstream risk feature for Moirai-style temporal simulation.
+The first realized_vol_20 adapter beat TimesFM zero-shot on one holdout.
+Promotion requires repeated chronological evidence, not one favorable segment.
 ```

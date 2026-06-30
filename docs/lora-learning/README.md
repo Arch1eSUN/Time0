@@ -19,3 +19,4 @@ Each note should answer four questions:
 - [006 - Changing The Target: Level vs Log Change](./006-target-change-log-change.md)
 - [007 - When Is LoRA Training Successful?](./007-success-and-stop-criteria.md)
 - [008 - When Does The Whole LoRA Project Stop?](./008-project-stop-and-release-strategy.md)
+- [009 - First Clean LoRA Win: Realized Volatility](./009-first-clean-lora-win-realized-vol.md)

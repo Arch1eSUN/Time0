@@ -56,7 +56,7 @@ Current verdict:
 ```text
 level LoRA: failed candidate success; stop increasing steps for this target.
 log_change LoRA: partial signal; MAE improved slightly, SMAPE regressed.
-next target: realized_vol_20.
+realized_vol_20 LoRA: candidate success on one holdout; needs rolling holdout.
 ```
 
 ## Data Contract
