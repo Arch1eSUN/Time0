@@ -165,7 +165,7 @@ Before publishing:
 
 ## Immediate Next Step
 
-Diagnose weak rolling segments before increasing LoRA capacity:
+Test normalization before increasing LoRA capacity:
 
 ```text
 field=realized_vol_20
@@ -173,11 +173,13 @@ lora_r=4
 lora_alpha=8
 max_steps=200
 balanced holdout cut-points: skip_windows=4000, 5000, 5500
-next missing evidence: why cut5500 improves only 3 of 10 series
+next missing evidence: normalized target robustness
 ```
 
 The `realized_vol_20` adapter family improved all 3 balanced rolling
 cut-points, but average MAE improvement was `1.5158489425955908%`, below the 2%
 Promotion Ready threshold. Per-series attribution shows `DEXUSEU` and `DGS10`
 negative on average, and `cut5500` only improved 3 of 10 series. Promotion
-remains blocked until weak-series and regime effects are understood.
+remains blocked. Distribution diagnostics show mixed cut5500 regime shift, so
+the next controlled experiment should test per-series normalization before
+larger LoRA rank.

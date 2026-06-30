@@ -22,3 +22,4 @@ Each note should answer four questions:
 - [009 - First Clean LoRA Win: Realized Volatility](./009-first-clean-lora-win-realized-vol.md)
 - [010 - Rolling Validation Without Data Leakage](./010-rolling-validation-no-leakage.md)
 - [011 - Per-Series Attribution: Where Did LoRA Help?](./011-per-series-attribution.md)
+- [012 - Distribution Shift: Why Cut5500 Is Weak](./012-distribution-shift-and-regime.md)

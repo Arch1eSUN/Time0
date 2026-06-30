@@ -56,7 +56,7 @@ Current verdict:
 ```text
 level LoRA: failed candidate success; stop increasing steps for this target.
 log_change LoRA: partial signal; MAE improved slightly, SMAPE regressed.
-realized_vol_20 LoRA: positive rolling signal, but per-series evidence blocks promotion.
+realized_vol_20 LoRA: positive rolling signal, but cut5500 distribution shift blocks promotion.
 ```
 
 ## Data Contract
