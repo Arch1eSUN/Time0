@@ -1,0 +1,14 @@
+[project]
+name = "timesfm-lora-lab"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = [
+  "accelerate>=1.8.0",
+  "numpy>=2.0.0",
+  "peft>=0.15.0",
+  "torch>=2.7.0",
+  "transformers==5.12.1",
+]
+
+[tool.uv]
+package = false

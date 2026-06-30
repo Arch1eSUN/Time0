@@ -1,0 +1,9 @@
+.venv/
+.hf-cache/
+__pycache__/
+*.pyc
+data/market/*.csv
+adapters/*
+reports/*.json
+!adapters/.gitkeep
+!reports/.gitkeep
