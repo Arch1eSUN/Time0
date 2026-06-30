@@ -165,17 +165,18 @@ Before publishing:
 
 ## Immediate Next Step
 
-Validate the first clean target signal with rolling holdout cut-points:
+Diagnose the first rolling validation result with per-series metrics:
 
 ```text
 field=realized_vol_20
 lora_r=4
 lora_alpha=8
 max_steps=200
-same context/horizon/training recipe
-holdout cut-points: skip_windows=4000, 5000, 6000
+balanced holdout cut-points: skip_windows=4000, 5000, 5500
+next missing evidence: per-series metrics
 ```
 
-The first `realized_vol_20` adapter beat TimesFM zero-shot on one holdout. It is
-Candidate Success, not Promotion Ready. Promotion remains blocked until rolling
-holdout evidence shows stable improvement rather than one favorable segment.
+The `realized_vol_20` adapter family improved all 3 balanced rolling
+cut-points, but average MAE improvement was `1.5158489425955908%`, below the 2%
+Promotion Ready threshold. Promotion remains blocked until per-series evidence
+and stronger rolling improvement are available.

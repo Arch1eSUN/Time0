@@ -23,7 +23,7 @@ ROOT_REPLACEMENT += "    }\n"
 ROOT_REPLACEMENT += '    import_structure[frozenset({})]["models.auto.tokenization_auto"] = {\n'
 ROOT_REPLACEMENT += '        "AutoTokenizer",\n'
 ROOT_REPLACEMENT += "    }\n"
-ROOT_REPLACEMENT += '    import_structure[frozenset({})]["models.bloom.modeling_bloom"] = {\n'
+ROOT_REPLACEMENT += '    import_structure[frozenset({})]["models.bloom.modeling_bloom_stub"] = {\n'
 ROOT_REPLACEMENT += '        "BloomPreTrainedModel",\n'
 ROOT_REPLACEMENT += "    }\n"
 ROOT_REPLACEMENT += '    import_structure[frozenset({})]["models.timesfm2_5.configuration_timesfm2_5"] = {\n'
@@ -49,7 +49,7 @@ MODELS_REPLACEMENT += '                "AutoModelForTokenClassification",\n'
 MODELS_REPLACEMENT += "            },\n"
 MODELS_REPLACEMENT += '            "auto.tokenization_auto": {"AutoTokenizer"},\n'
 MODELS_REPLACEMENT += '            "auto.configuration_auto": {"AutoConfig"},\n'
-MODELS_REPLACEMENT += '            "bloom.modeling_bloom": {"BloomPreTrainedModel"},\n'
+MODELS_REPLACEMENT += '            "bloom.modeling_bloom_stub": {"BloomPreTrainedModel"},\n'
 MODELS_REPLACEMENT += '            "timesfm2_5.configuration_timesfm2_5": {"TimesFm2_5Config"},\n'
 MODELS_REPLACEMENT += '            "timesfm2_5.modeling_timesfm2_5": {\n'
 MODELS_REPLACEMENT += '                "TimesFm2_5Model",\n'
@@ -84,11 +84,27 @@ def patch_file(path: Path, start: str, replacement: str) -> None:
     if replacement in text:
         print(f"[patch] already patched {path}")
         return
-    if start not in text:
-        raise SystemExit(f"expected import block was not found in {path}")
+    if start in text:
+        path.write_text(text.replace(start, replacement))
+        print(f"[patch] patched {path}")
+        return
+    if "modeling_bloom" in text:
+        path.write_text(text.replace("modeling_bloom", "modeling_bloom_stub"))
+        print(f"[patch] upgraded bloom stub mapping in {path}")
+        return
 
-    path.write_text(text.replace(start, replacement))
-    print(f"[patch] patched {path}")
+    raise SystemExit(f"expected import block was not found in {path}")
+
+
+def write_bloom_stub(transformers_root: Path) -> None:
+    stub_path = transformers_root / "models" / "bloom" / "modeling_bloom_stub.py"
+    stub_path.write_text(
+        "class BloomPreTrainedModel:\n"
+        "    \"\"\"Minimal PEFT import shim for TimesFM LoRA experiments.\"\"\"\n"
+        "\n"
+        "    pass\n"
+    )
+    print(f"[patch] wrote {stub_path}")
 
 
 def main() -> None:
@@ -100,6 +116,7 @@ def main() -> None:
     root_init = candidates[0]
     models_init = root_init.parent / "models" / "__init__.py"
     auto_init = root_init.parent / "models" / "auto" / "__init__.py"
+    write_bloom_stub(root_init.parent)
     patch_file(root_init, ROOT_START, ROOT_REPLACEMENT)
     patch_file(models_init, MODELS_START, MODELS_REPLACEMENT)
     patch_file(auto_init, AUTO_START, AUTO_REPLACEMENT)
