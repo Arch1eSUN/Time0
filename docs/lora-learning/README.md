@@ -53,3 +53,4 @@ Each note should answer four questions:
 - [040 - Latest-Cut Downside Guard](./040-latest-cut-downside-guard.md)
 - [041 - Two-Horizon Temporal Guard](./041-two-horizon-temporal-guard.md)
 - [042 - Regime-Full Router Breakthrough](./042-regime-full-router-breakthrough.md)
+- [043 - Router Manifest Freeze](./043-router-manifest-freeze.md)

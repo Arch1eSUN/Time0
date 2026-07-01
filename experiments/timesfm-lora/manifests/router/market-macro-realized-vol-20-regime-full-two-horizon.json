@@ -1,0 +1,91 @@
+{
+  "schema_version": 1,
+  "id": "market-macro-realized-vol-20-regime-full-two-horizon",
+  "status": "candidate",
+  "created_at": "2026-07-02",
+  "target": {
+    "dataset": "market-macro",
+    "field": "realized_vol_20",
+    "horizon_len": 20,
+    "lora_rank": 4,
+    "base_model": "timesfm-2.5-200m-transformers"
+  },
+  "feature_surface": {
+    "name": "regime-full",
+    "required_runtime_feature_groups": [
+      "context",
+      "context_regime",
+      "prediction_context_alignment",
+      "prediction_disagreement",
+      "prediction_disagreement_normalized",
+      "prediction_summaries"
+    ]
+  },
+  "router": {
+    "policy": "fallback_veto_two_horizon_guarded",
+    "candidate_set": "knn-regret",
+    "selection_metric": "mae",
+    "cold_start_family": "recent2000",
+    "fallback_family": "recent2000",
+    "min_validation_lift": 0.0,
+    "min_series_validation_lift": 0.001,
+    "series_risk_decay": 0.05,
+    "veto_feature_mode": "global",
+    "veto_k": 25,
+    "veto_regret_threshold": 0.00025,
+    "softmax_steps": 2000
+  },
+  "candidate_families": [
+    "zero-shot",
+    "full",
+    "recent1500",
+    "recent2000",
+    "recent3000"
+  ],
+  "validation": {
+    "min_routed_delta_vs_fallback": 0.0,
+    "required_surfaces": [
+      "late_regime_full",
+      "expanded_regime_full"
+    ],
+    "surfaces": [
+      {
+        "name": "late_regime_full",
+        "input": "reports/router-rows-late-regime-full-market-macro-realized-vol-20-h20-r4.json",
+        "rows": 2500,
+        "cuts": [
+          4500,
+          4750,
+          5000,
+          5250,
+          5500
+        ],
+        "expected_routed_delta_vs_fallback": 0.00002355445156944358
+      },
+      {
+        "name": "expanded_regime_full",
+        "input": "reports/router-rows-expanded-regime-full-market-macro-realized-vol-20-h20-r4.json",
+        "rows": 4500,
+        "cuts": [
+          3500,
+          3750,
+          4000,
+          4250,
+          4500,
+          4750,
+          5000,
+          5250,
+          5500
+        ],
+        "expected_routed_delta_vs_fallback": 0.000019947579099705015
+      }
+    ]
+  },
+  "evidence": {
+    "run_record": "runs/2026-07-02-market-macro-realized-vol-20-regime-full-router.md",
+    "learning_note": "../../docs/lora-learning/042-regime-full-router-breakthrough.md",
+    "late_attribution": "reports/router-attribution-two-horizon-fallback-veto-shared-best-late-regime-full-market-macro-realized-vol-20-h20-r4.json",
+    "expanded_attribution": "reports/router-attribution-two-horizon-fallback-veto-shared-best-expanded-regime-full-market-macro-realized-vol-20-h20-r4.json"
+  },
+  "promotion_note": "Candidate checkpoint only. Requires second-target validation before release."
+}
