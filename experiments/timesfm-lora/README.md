@@ -95,6 +95,7 @@ recency-weighted series risk: decay 0.1 ties the best series_guarded result and 
 early rolling grid: adds cuts 3000/3250 and 5500 rows, but fail-closed learned routing underperforms fixed recent2000; next step is richer no-leak runtime features.
 no-leak regime features: first positive MAE validation-gated router on early grid; SMAPE and series guards still block promotion.
 feature ablation: best no-leak surface is alignment-normalized; MAE, SMAPE, and series-guarded MAE turn positive, but series lift remains too small for promotion.
+policy sweep: series-risk tuning does not beat series_guarded; validation_gated 0.005 is the best risk-balanced candidate, but still not promotion-ready.
 ```
 
 ## Data Contract
@@ -263,6 +264,25 @@ uv run python scripts/ablate_router_features.py \
 uv run python scripts/evaluate_prediction_router.py \
   --input reports/router-rows-early-regime-ablate-alignment-normalized-market-macro-realized-vol-20-h20-r4.json \
   --output reports/no-leak-prediction-router-early-regime-ablate-alignment-normalized-market-macro-realized-vol-20-h20-r4.json
+```
+
+Policy sweep:
+
+```bash
+uv run python scripts/sweep_router_policies.py \
+  --input reports/router-rows-early-regime-ablate-alignment-normalized-market-macro-realized-vol-20-h20-r4.json \
+  --output reports/router-policy-sweep-alignment-normalized-market-macro-realized-vol-20-h20-r4.json \
+  --policy validation_gated \
+  --policy series_guarded \
+  --policy series_risk_penalized \
+  --min-validation-lift 0 \
+  --min-validation-lift 0.005 \
+  --min-validation-lift 0.01 \
+  --min-series-validation-lift 0 \
+  --min-series-validation-lift 0.001 \
+  --series-risk-decay 0.05 \
+  --series-risk-decay 0.1 \
+  --series-risk-decay 0.25
 ```
 
 Router attribution:

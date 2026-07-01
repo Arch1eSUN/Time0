@@ -110,6 +110,7 @@ Stop a training direction when any of these happens:
 | `early rolling grid` | `realized_vol_20` | Useful negative result | adding cuts 3000/3250 creates 5500 rows and 6.99% leaky oracle headroom, but validation-gated policies underperform fixed recent2000 |
 | `no-leak regime features` | `realized_vol_20` | First positive MAE router milestone, not Promotion Ready | validation-gated routed MAE improves fixed recent2000 by 0.0002508807 on early grid, but SMAPE and series-aware guards still regress |
 | `feature ablation alignment-normalized` | `realized_vol_20` | Best router feature surface so far, not Promotion Ready | alignment-normalized improves fixed recent2000 on MAE, SMAPE, and series-guarded MAE, but series-aware lift is only 0.0000148190 |
+| `policy sweep alignment-normalized` | `realized_vol_20` | Useful stop signal, not Promotion Ready | best aggregate policy reaches 0.0002674001 MAE delta but only 4/10 positive series; best risk-balanced aggregate keeps 0.0002611555 delta with 7/10 positive series; series-risk tuning does not beat series_guarded |
 
 Recommendation: stop increasing steps on `level`. Treat `realized_vol_20` as
 the first clean target signal, but do not promote it until distribution shift
@@ -197,5 +198,11 @@ preserves MAE lift without series-level regressions. Feature ablation showed
 `alignment-normalized` is the best surface: it improves MAE, SMAPE, and
 series-guarded MAE over fixed `recent2000`, but the series-aware lift remains
 too small for promotion. The next useful step is series-risk tuning on
-`alignment-normalized`, not more raw context features.
+`alignment-normalized`, not more raw context features. Policy sweep tested that
+next and showed the manual risk frontier has not improved: the best aggregate
+row is still `validation_gated min_validation_lift=0.01`, while the best
+risk-balanced aggregate row is `validation_gated min_validation_lift=0.005`.
+Series-risk policies do not beat `series_guarded`, so further hard-gate tuning
+is low leverage. The next useful step is a supervised selector objective or
+richer loss-aware router training, not another threshold sweep.
 ```

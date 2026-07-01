@@ -40,3 +40,4 @@ Each note should answer four questions:
 - [027 - Early Grid Negative Result](./027-early-grid-negative-result.md)
 - [028 - No-Leak Regime Features](./028-no-leak-regime-features.md)
 - [029 - Feature Ablation](./029-feature-ablation.md)
+- [030 - Policy Sweep And Risk Tradeoff](./030-policy-sweep-risk-tradeoff.md)

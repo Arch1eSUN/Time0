@@ -460,3 +460,27 @@ alignment-normalized. Promotion remains blocked because series-aware lift is
 positive but too small; tune series-risk policy around this feature surface
 before training more LoRA adapters.
 ```
+
+Policy-sweep checkpoint:
+
+```text
+configs tested: 27
+best aggregate policy: validation_gated, min_validation_lift=0.01
+best aggregate MAE delta vs fallback: 0.0002674001
+best aggregate positive/negative routed series: 4/6
+best risk-balanced aggregate policy: validation_gated, min_validation_lift=0.005
+best risk-balanced aggregate MAE delta vs fallback: 0.0002611555
+best risk-balanced aggregate positive/negative routed series: 7/3
+best series_guarded MAE delta vs fallback: 0.0000363414
+best 8/2 series split MAE delta vs fallback: 0.0000212628
+```
+
+Conclusion:
+
+```text
+Manual hard-gate and series-risk tuning has reached a stop signal. The sweep
+can trade aggregate lift for series stability, but it does not create a
+publishable policy frontier. The next useful research step is a supervised
+selector objective or richer loss-aware router training, not more manual
+threshold sweeps or additional raw context features.
+```
