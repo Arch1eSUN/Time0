@@ -8,6 +8,9 @@ from typing import Any
 
 from rolling_grid import (
     ALL_CUTS,
+    DEFAULT_ADAPTER_PREFIX,
+    DEFAULT_FULL_BALANCED_ADAPTER,
+    DEFAULT_TARGET_SLUG,
     FAMILIES,
     GRID_CHOICES,
     ArchiveJob,
@@ -28,6 +31,10 @@ def parse_args() -> argparse.Namespace:
         "--output",
         default="reports/router-rows-market-macro-realized-vol-20-h20-r4.json",
     )
+    parser.add_argument("--target-slug", default=DEFAULT_TARGET_SLUG)
+    parser.add_argument("--adapter-prefix", default=DEFAULT_ADAPTER_PREFIX)
+    parser.add_argument("--full-balanced-adapter", default=DEFAULT_FULL_BALANCED_ADAPTER)
+    parser.add_argument("--no-full-balanced-adapter", action="store_true")
     parser.add_argument("--grid", choices=GRID_CHOICES, default="base")
     parser.add_argument("--cut", action="append", type=int, choices=ALL_CUTS)
     parser.add_argument("--family", action="append", choices=FAMILIES)
@@ -45,14 +52,44 @@ def experiment_path(path: str) -> Path:
     return experiment_root() / raw_path
 
 
-def archive_path(family: str, cut: int) -> Path:
+def archive_path(
+    family: str,
+    cut: int,
+    *,
+    target_slug: str,
+    adapter_prefix: str,
+    full_balanced_adapter: str | None,
+) -> Path:
     return experiment_root() / predictions_path(
-        ArchiveJob(family=family, cut=cut, adapter_dir=adapter_dir_for(family, cut))
+        ArchiveJob(
+            family=family,
+            cut=cut,
+            adapter_dir=adapter_dir_for(
+                family,
+                cut,
+                adapter_prefix=adapter_prefix,
+                full_balanced_adapter=full_balanced_adapter,
+            ),
+        ),
+        target_slug=target_slug,
     )
 
 
-def load_archive(*, family: str, cut: int) -> dict[str, Any]:
-    path = archive_path(family, cut)
+def load_archive(
+    *,
+    family: str,
+    cut: int,
+    target_slug: str,
+    adapter_prefix: str,
+    full_balanced_adapter: str | None,
+) -> dict[str, Any]:
+    path = archive_path(
+        family,
+        cut,
+        target_slug=target_slug,
+        adapter_prefix=adapter_prefix,
+        full_balanced_adapter=full_balanced_adapter,
+    )
     if not path.exists():
         raise FileNotFoundError(f"missing prediction archive: {path}")
 
@@ -321,7 +358,14 @@ def summarize_rows(rows: list[dict[str, Any]], families: list[str]) -> dict[str,
     }
 
 
-def build_router_rows(*, cuts: list[int], families: list[str]) -> dict[str, Any]:
+def build_router_rows(
+    *,
+    cuts: list[int],
+    families: list[str],
+    target_slug: str = DEFAULT_TARGET_SLUG,
+    adapter_prefix: str = DEFAULT_ADAPTER_PREFIX,
+    full_balanced_adapter: str | None = DEFAULT_FULL_BALANCED_ADAPTER,
+) -> dict[str, Any]:
     if "zero-shot" not in families:
         raise ValueError("zero-shot must be included so router rows have a fixed baseline")
     if len(families) < 2:
@@ -330,11 +374,31 @@ def build_router_rows(*, cuts: list[int], families: list[str]) -> dict[str, Any]
     rows: list[dict[str, Any]] = []
     archive_paths: dict[str, dict[str, str]] = {}
     expected_horizon: int | None = None
-    expected_field: str | None = None
+    fields: set[str] = set()
 
     for cut in cuts:
-        archives = {family: load_archive(family=family, cut=cut) for family in families}
-        archive_paths[str(cut)] = {family: str(archive_path(family, cut)) for family in families}
+        archives = {
+            family: load_archive(
+                family=family,
+                cut=cut,
+                target_slug=target_slug,
+                adapter_prefix=adapter_prefix,
+                full_balanced_adapter=full_balanced_adapter,
+            )
+            for family in families
+        }
+        archive_paths[str(cut)] = {
+            family: str(
+                archive_path(
+                    family,
+                    cut,
+                    target_slug=target_slug,
+                    adapter_prefix=adapter_prefix,
+                    full_balanced_adapter=full_balanced_adapter,
+                )
+            )
+            for family in families
+        }
         record_ids = {
             family: [record["window_id"] for record in archive["records"]] for family, archive in archives.items()
         }
@@ -348,12 +412,9 @@ def build_router_rows(*, cuts: list[int], families: list[str]) -> dict[str, Any]
             field = str(archive["field"])
             if expected_horizon is None:
                 expected_horizon = horizon
-            if expected_field is None:
-                expected_field = field
             if horizon != expected_horizon:
                 raise ValueError(f"cut={cut} horizon_len={horizon}, expected {expected_horizon}")
-            if field != expected_field:
-                raise ValueError(f"cut={cut} field={field}, expected {expected_field}")
+            fields.add(field)
 
         for index, _window_id in enumerate(base_ids):
             records_by_family = {family: archives[family]["records"][index] for family in families}
@@ -362,7 +423,8 @@ def build_router_rows(*, cuts: list[int], families: list[str]) -> dict[str, Any]
     return {
         "method": "prediction_archive_router_rows",
         "feature_set": "context_prediction_regime_v2",
-        "field": expected_field,
+        "field": sorted(fields)[0] if len(fields) == 1 else "per_cut",
+        "fields": sorted(fields),
         "horizon_len": expected_horizon,
         "cuts": cuts,
         "families": families,
@@ -382,7 +444,14 @@ def main() -> None:
     args = parse_args()
     cuts = selected_cuts(grid=args.grid, selected=args.cut)
     families = selected_families(args.family)
-    report = build_router_rows(cuts=cuts, families=families)
+    full_balanced_adapter = None if args.no_full_balanced_adapter else args.full_balanced_adapter
+    report = build_router_rows(
+        cuts=cuts,
+        families=families,
+        target_slug=args.target_slug,
+        adapter_prefix=args.adapter_prefix,
+        full_balanced_adapter=full_balanced_adapter,
+    )
 
     output = experiment_path(args.output)
     output.parent.mkdir(parents=True, exist_ok=True)

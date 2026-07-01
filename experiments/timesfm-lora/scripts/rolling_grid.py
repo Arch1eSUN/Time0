@@ -13,6 +13,9 @@ ALL_CUTS = EARLY_CUTS
 
 FAMILIES = ("zero-shot", "full", "recent1500", "recent2000", "recent3000")
 GRID_CHOICES = ("base", "expanded", "early")
+DEFAULT_TARGET_SLUG = "market-macro-realized-vol-20-h20-r4"
+DEFAULT_ADAPTER_PREFIX = "market-macro-realized-vol-20-h20-r4-step200"
+DEFAULT_FULL_BALANCED_ADAPTER = "adapters/market-macro-realized-vol-20-h20-r4-step200-balanced"
 
 RECENT_WINDOWS = {
     "recent1500": 1500,
@@ -69,20 +72,37 @@ def selected_families(selected: list[str] | None) -> list[str]:
     return [family for family in FAMILIES if family in selected]
 
 
-def adapter_dir_for(family: str, cut: int) -> str | None:
+def adapter_dir_for(
+    family: str,
+    cut: int,
+    *,
+    adapter_prefix: str = DEFAULT_ADAPTER_PREFIX,
+    full_balanced_adapter: str | None = DEFAULT_FULL_BALANCED_ADAPTER,
+) -> str | None:
     if family == "zero-shot":
         return None
     if family == "full":
-        if cut == 5000:
-            return "adapters/market-macro-realized-vol-20-h20-r4-step200-balanced"
-        return f"adapters/market-macro-realized-vol-20-h20-r4-step200-train{cut}"
+        if cut == 5000 and full_balanced_adapter:
+            return full_balanced_adapter
+        return f"adapters/{adapter_prefix}-train{cut}"
     if family in RECENT_WINDOWS:
-        return f"adapters/market-macro-realized-vol-20-h20-r4-step200-{family}-train{cut}"
+        return f"adapters/{adapter_prefix}-{family}-train{cut}"
     raise ValueError(f"unsupported family: {family}")
 
 
-def train_job_for(family: str, cut: int) -> TrainJob | None:
-    adapter_dir = adapter_dir_for(family, cut)
+def train_job_for(
+    family: str,
+    cut: int,
+    *,
+    adapter_prefix: str = DEFAULT_ADAPTER_PREFIX,
+    full_balanced_adapter: str | None = DEFAULT_FULL_BALANCED_ADAPTER,
+) -> TrainJob | None:
+    adapter_dir = adapter_dir_for(
+        family,
+        cut,
+        adapter_prefix=adapter_prefix,
+        full_balanced_adapter=full_balanced_adapter,
+    )
     if adapter_dir is None:
         return None
     if family == "full":
@@ -105,31 +125,57 @@ def train_job_for(family: str, cut: int) -> TrainJob | None:
     raise ValueError(f"unsupported family: {family}")
 
 
-def archive_jobs(*, cuts: list[int], families: list[str]) -> list[ArchiveJob]:
+def archive_jobs(
+    *,
+    cuts: list[int],
+    families: list[str],
+    adapter_prefix: str = DEFAULT_ADAPTER_PREFIX,
+    full_balanced_adapter: str | None = DEFAULT_FULL_BALANCED_ADAPTER,
+) -> list[ArchiveJob]:
     return [
-        ArchiveJob(family=family, cut=cut, adapter_dir=adapter_dir_for(family, cut))
+        ArchiveJob(
+            family=family,
+            cut=cut,
+            adapter_dir=adapter_dir_for(
+                family,
+                cut,
+                adapter_prefix=adapter_prefix,
+                full_balanced_adapter=full_balanced_adapter,
+            ),
+        )
         for cut in cuts
         for family in families
     ]
 
 
-def train_jobs(*, cuts: list[int], families: list[str]) -> list[TrainJob]:
+def train_jobs(
+    *,
+    cuts: list[int],
+    families: list[str],
+    adapter_prefix: str = DEFAULT_ADAPTER_PREFIX,
+    full_balanced_adapter: str | None = DEFAULT_FULL_BALANCED_ADAPTER,
+) -> list[TrainJob]:
     jobs: list[TrainJob] = []
     for cut in cuts:
         for family in families:
-            job = train_job_for(family, cut)
+            job = train_job_for(
+                family,
+                cut,
+                adapter_prefix=adapter_prefix,
+                full_balanced_adapter=full_balanced_adapter,
+            )
             if job is not None:
                 jobs.append(job)
     return jobs
 
 
-def slug_for(job: ArchiveJob) -> str:
-    return f"market-macro-realized-vol-20-h20-r4-{job.family}-holdout500-skip{job.cut}"
+def slug_for(job: ArchiveJob, *, target_slug: str = DEFAULT_TARGET_SLUG) -> str:
+    return f"{target_slug}-{job.family}-holdout500-skip{job.cut}"
 
 
-def report_path(job: ArchiveJob) -> Path:
-    return Path("reports") / f"archive-export-timesfm-{slug_for(job)}.json"
+def report_path(job: ArchiveJob, *, target_slug: str = DEFAULT_TARGET_SLUG) -> Path:
+    return Path("reports") / f"archive-export-timesfm-{slug_for(job, target_slug=target_slug)}.json"
 
 
-def predictions_path(job: ArchiveJob) -> Path:
-    return Path("reports") / f"predictions-timesfm-{slug_for(job)}.json"
+def predictions_path(job: ArchiveJob, *, target_slug: str = DEFAULT_TARGET_SLUG) -> Path:
+    return Path("reports") / f"predictions-timesfm-{slug_for(job, target_slug=target_slug)}.json"

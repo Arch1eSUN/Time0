@@ -54,3 +54,4 @@ Each note should answer four questions:
 - [041 - Two-Horizon Temporal Guard](./041-two-horizon-temporal-guard.md)
 - [042 - Regime-Full Router Breakthrough](./042-regime-full-router-breakthrough.md)
 - [043 - Router Manifest Freeze](./043-router-manifest-freeze.md)
+- [044 - Z-Score Second Target Archive](./044-zscore-second-target-archive.md)
