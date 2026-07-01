@@ -15,6 +15,7 @@ POLICIES = (
     "series_multicut_worst_guarded",
     "series_risk_penalized",
     "fallback_veto",
+    "fallback_veto_series_guarded",
 )
 
 
@@ -75,6 +76,24 @@ def sweep_args(args: argparse.Namespace) -> list[SimpleNamespace]:
                                     veto_feature_mode=veto_feature_mode,
                                 )
                             )
+            elif policy == "fallback_veto_series_guarded":
+                for series_lift in series_lifts:
+                    for decay in risk_decays:
+                        for veto_feature_mode in veto_feature_modes:
+                            for veto_k in veto_ks:
+                                for veto_threshold in veto_thresholds:
+                                    runs.append(
+                                        run_args(
+                                            args,
+                                            policy,
+                                            validation_lift,
+                                            series_lift,
+                                            decay,
+                                            veto_k=veto_k,
+                                            veto_regret_threshold=veto_threshold,
+                                            veto_feature_mode=veto_feature_mode,
+                                        )
+                                    )
             elif policy == "series_risk_penalized":
                 for series_lift in series_lifts:
                     for decay in risk_decays:

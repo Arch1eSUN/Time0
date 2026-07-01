@@ -41,6 +41,7 @@ def parse_args() -> argparse.Namespace:
             "series_multicut_worst_guarded",
             "series_risk_penalized",
             "fallback_veto",
+            "fallback_veto_series_guarded",
         ],
         default="validation_gated",
     )
@@ -314,6 +315,110 @@ def recency_weighted_series_risk_gate(
     return gate, validation_reports
 
 
+def recency_weighted_selection_risk_gate(
+    *,
+    prior_cuts: list[int],
+    cut_rows: dict[int, list[dict[str, Any]]],
+    selected_by_cut: dict[int, list[str]],
+    fallback_family: str,
+    metric: MetricName,
+    min_series_validation_lift: float,
+    series_risk_decay: float,
+) -> tuple[dict[str, dict[str, Any]], list[dict[str, Any]]]:
+    if not 0.0 < series_risk_decay <= 1.0:
+        raise ValueError("--series-risk-decay must be in (0, 1]")
+
+    per_cut_gates: list[tuple[int, dict[str, dict[str, Any]]]] = []
+    validation_reports: list[dict[str, Any]] = []
+
+    for validation_cut in prior_cuts[1:]:
+        current_validation_rows = cut_rows[validation_cut]
+        current_selected = selected_by_cut[validation_cut]
+        current_gate = series_validation_gate(
+            validation_rows=current_validation_rows,
+            candidate_selected=current_selected,
+            fallback_family=fallback_family,
+            metric=metric,
+            min_series_validation_lift=min_series_validation_lift,
+        )
+        per_cut_gates.append((validation_cut, current_gate))
+        validation_reports.append(
+            {
+                "validation_cut": validation_cut,
+                "selected_counts": dict(sorted(Counter(current_selected).items())),
+                "candidate_metric": metric_mean(current_validation_rows, current_selected, metric),
+                "fallback_metric": metric_mean(
+                    current_validation_rows,
+                    fixed_selection(current_validation_rows, fallback_family),
+                    metric,
+                ),
+                "allowed_series": [
+                    series_id for series_id, item in current_gate.items() if item["allowed"]
+                ],
+                "blocked_series": [
+                    series_id for series_id, item in current_gate.items() if not item["allowed"]
+                ],
+            }
+        )
+
+    gate: dict[str, dict[str, Any]] = {}
+    if not per_cut_gates:
+        return gate, validation_reports
+
+    validation_count = len(per_cut_gates)
+    for series_id in sorted(per_cut_gates[0][1]):
+        weighted_candidate_metric = 0.0
+        weighted_fallback_metric = 0.0
+        weighted_relative_lift = 0.0
+        total_weight = 0.0
+        cut_details: list[dict[str, Any]] = []
+
+        for cut_index, (validation_cut, cut_gate) in enumerate(per_cut_gates):
+            weight = series_risk_decay ** (validation_count - 1 - cut_index)
+            item = cut_gate[series_id]
+            candidate_metric = float(item["candidate_metric"])
+            fallback_metric = float(item["fallback_metric"])
+            relative_lift = improvement(fallback_metric, candidate_metric)
+            weighted_candidate_metric += weight * candidate_metric
+            weighted_fallback_metric += weight * fallback_metric
+            weighted_relative_lift += weight * relative_lift
+            total_weight += weight
+            cut_details.append(
+                {
+                    "validation_cut": validation_cut,
+                    "weight": weight,
+                    "candidate_metric": candidate_metric,
+                    "fallback_metric": fallback_metric,
+                    "relative_lift": relative_lift,
+                    "allowed": item["allowed"],
+                    "selected_counts": item["selected_counts"],
+                }
+            )
+
+        weighted_candidate_metric /= total_weight
+        weighted_fallback_metric /= total_weight
+        weighted_mean_relative_lift = weighted_relative_lift / total_weight
+        weighted_metric_lift = improvement(weighted_fallback_metric, weighted_candidate_metric)
+        latest_relative_lift = cut_details[-1]["relative_lift"]
+        required_metric = weighted_fallback_metric * (1.0 - min_series_validation_lift)
+        gate[series_id] = {
+            "validation_cuts": [validation_cut for validation_cut, _cut_gate in per_cut_gates],
+            "weighted_candidate_metric": weighted_candidate_metric,
+            "weighted_fallback_metric": weighted_fallback_metric,
+            "weighted_relative_lift": weighted_metric_lift,
+            "weighted_mean_relative_lift": weighted_mean_relative_lift,
+            "latest_relative_lift": latest_relative_lift,
+            "risk_score": weighted_metric_lift,
+            "required_metric_to_allow": required_metric,
+            "min_series_validation_lift": min_series_validation_lift,
+            "series_risk_decay": series_risk_decay,
+            "allowed": weighted_candidate_metric <= required_metric,
+            "cut_details": cut_details,
+        }
+
+    return gate, validation_reports
+
+
 def selection_for_cut(
     *,
     cut: int,
@@ -343,6 +448,7 @@ def selection_for_cut(
         "series_multicut_worst_guarded",
         "series_risk_penalized",
         "fallback_veto",
+        "fallback_veto_series_guarded",
     }:
         raise ValueError(f"unsupported policy: {policy}")
 
@@ -452,7 +558,7 @@ def selection_for_cut(
             softmax_steps=softmax_steps,
         )
         series_gate_source = "recency_weighted_prior_validation_cuts"
-    elif policy == "fallback_veto" and should_route:
+    elif policy in {"fallback_veto", "fallback_veto_series_guarded"} and should_route:
         base_selections: dict[int, dict[str, Any]] = {}
         for prior_cut in prior_cuts:
             base_decision, base_selected = selection_for_cut(
@@ -500,6 +606,38 @@ def selection_for_cut(
             "veto_k": veto_k,
             "veto_regret_threshold": veto_regret_threshold,
         }
+        if policy == "fallback_veto_series_guarded":
+            guarded_selected_by_cut: dict[int, list[str]] = {}
+            for prior_cut in prior_cuts:
+                _guarded_decision, guarded_selected = selection_for_cut(
+                    cut=prior_cut,
+                    cuts=cuts,
+                    cut_rows=cut_rows,
+                    families=families,
+                    learned_configs=learned_configs,
+                    metric=metric,
+                    policy="fallback_veto",
+                    cold_start_family=cold_start_family,
+                    fallback_family=fallback_family,
+                    min_validation_lift=min_validation_lift,
+                    min_series_validation_lift=0.0,
+                    series_risk_decay=series_risk_decay,
+                    softmax_steps=softmax_steps,
+                    veto_k=veto_k,
+                    veto_regret_threshold=veto_regret_threshold,
+                    veto_feature_mode=veto_feature_mode,
+                )
+                guarded_selected_by_cut[prior_cut] = guarded_selected
+            series_gate, series_gate_validation_reports = recency_weighted_selection_risk_gate(
+                prior_cuts=prior_cuts,
+                cut_rows=cut_rows,
+                selected_by_cut=guarded_selected_by_cut,
+                fallback_family=fallback_family,
+                metric=metric,
+                min_series_validation_lift=min_series_validation_lift,
+                series_risk_decay=series_risk_decay,
+            )
+            series_gate_source = "recency_weighted_prior_fallback_veto_cuts"
 
     if series_gate is not None:
         selected = [
@@ -665,6 +803,11 @@ def report_verdict(policy: str) -> str:
         return (
             "Fallback-veto routing rejects historically risky overrides; promotion "
             "still requires validation on a later archive or second target."
+        )
+    if policy == "fallback_veto_series_guarded":
+        return (
+            "Guarded fallback-veto adds per-series historical downside control; "
+            "promotion still requires aggregate lift and broad positive coverage."
         )
     if policy == "series_multicut_worst_guarded":
         return (
