@@ -35,3 +35,4 @@ Each note should answer four questions:
 - [022 - Expanded Rolling Grid And Router Evidence](./022-expanded-rolling-grid.md)
 - [023 - Router Attribution: Who Helped And Who Got Hurt?](./023-router-attribution.md)
 - [024 - Series-Aware Router Guard](./024-series-aware-router-guard.md)
+- [025 - Multi-Cut Validation And Over-Guarding](./025-multi-cut-validation-and-over-guarding.md)

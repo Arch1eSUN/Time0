@@ -352,3 +352,23 @@ but it is still not publishable. A one-cut series gate is too thin: it blocks
 DGS10/SP500 at cut4250, but does not catch all series risk earlier. The next
 experiment should test multi-cut series validation or a series-risk penalty.
 ```
+
+Multi-cut series-guard checkpoint:
+
+```text
+aggregate multi-cut MAE delta over fallback: 0.0001260041
+worst-cut multi-cut MAE delta over fallback: 0.0001749690
+latest-cut series_guarded MAE delta over fallback: 0.0002025053
+worst-cut blocked at cut4250: DFF, DGS10, SP500
+```
+
+Conclusion:
+
+```text
+Multi-cut validation is a useful negative result. Aggregating prior validation
+cuts diluted local series failures and matched validation-gated performance.
+Worst-cut validation reduced risk but over-blocked DFF, the main positive
+contributor. The best policy remains latest-cut series_guarded with
+min_series_validation_lift=0.0. The next experiment should test a
+recency-weighted series-risk penalty, not a stricter hard gate.
+```

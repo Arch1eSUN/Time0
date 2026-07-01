@@ -90,6 +90,7 @@ prediction router: learned no-leak router did not beat fixed recent2000; validat
 expanded rolling grid: 4500 router rows across 9 cuts; validation-gated routing reaches 2.116398% routed MAE gain, but only adds 0.131419% relative lift over fixed recent2000 fallback.
 router attribution: validation-gated lift is concentrated; DFF contributes 148.703165% of net delta while DGS10 and SP500 regress vs fallback.
 series-aware router guard: best tested guard uses 0.0% per-series lift, improves routed MAE delta over fallback to 0.0002025053, but still blocks publication.
+multi-cut series guard: aggregate multi-cut does not improve; worst-cut improves over validation-gated but over-blocks DFF, so best policy remains series_guarded 0.0%.
 ```
 
 ## Data Contract
@@ -232,6 +233,15 @@ uv run python scripts/summarize_router_attribution.py \
   --policy series_guarded \
   --input reports/router-rows-expanded-market-macro-realized-vol-20-h20-r4.json \
   --output reports/router-attribution-series-guarded-expanded-market-macro-realized-vol-20-h20-r4.json
+```
+
+Multi-cut series guard:
+
+```bash
+uv run python scripts/summarize_router_attribution.py \
+  --policy series_multicut_worst_guarded \
+  --input reports/router-rows-expanded-market-macro-realized-vol-20-h20-r4.json \
+  --output reports/router-attribution-series-multicut-worst-guarded-expanded-market-macro-realized-vol-20-h20-r4.json
 ```
 
 Selected dry run:

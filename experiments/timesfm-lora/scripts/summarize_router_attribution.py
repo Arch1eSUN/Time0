@@ -31,7 +31,16 @@ def parse_args() -> argparse.Namespace:
         default="reports/router-attribution-expanded-market-macro-realized-vol-20-h20-r4.json",
     )
     parser.add_argument("--metric", choices=["mae", "smape"], default="mae")
-    parser.add_argument("--policy", choices=["validation_gated", "series_guarded"], default="validation_gated")
+    parser.add_argument(
+        "--policy",
+        choices=[
+            "validation_gated",
+            "series_guarded",
+            "series_multicut_guarded",
+            "series_multicut_worst_guarded",
+        ],
+        default="validation_gated",
+    )
     parser.add_argument("--cold-start-family", default="recent2000")
     parser.add_argument("--fallback-family", default="recent2000")
     parser.add_argument("--min-validation-lift", type=float, default=0.01)
@@ -96,6 +105,86 @@ def series_validation_gate(
     return gate
 
 
+def multicut_series_validation_gate(
+    *,
+    selected_config: CandidateConfig,
+    prior_cuts: list[int],
+    cut_rows: dict[int, list[dict[str, Any]]],
+    families: list[str],
+    fallback_family: str,
+    metric: MetricName,
+    min_series_validation_lift: float,
+    softmax_steps: int,
+    require_each_cut: bool,
+) -> tuple[dict[str, dict[str, Any]], list[dict[str, Any]]]:
+    validation_rows: list[dict[str, Any]] = []
+    validation_selected: list[str] = []
+    validation_reports: list[dict[str, Any]] = []
+    per_cut_gates: list[tuple[int, dict[str, dict[str, Any]]]] = []
+
+    for validation_index in range(1, len(prior_cuts)):
+        validation_cut = prior_cuts[validation_index]
+        train_cuts = prior_cuts[:validation_index]
+        train_rows = [row for train_cut in train_cuts for row in cut_rows[train_cut]]
+        current_validation_rows = cut_rows[validation_cut]
+        current_selected = select_candidate(
+            selected_config,
+            train_rows,
+            current_validation_rows,
+            families=families,
+            metric=metric,
+            softmax_steps=softmax_steps,
+        )
+        current_gate = series_validation_gate(
+            validation_rows=current_validation_rows,
+            candidate_selected=current_selected,
+            fallback_family=fallback_family,
+            metric=metric,
+            min_series_validation_lift=min_series_validation_lift,
+        )
+        per_cut_gates.append((validation_cut, current_gate))
+        validation_rows.extend(current_validation_rows)
+        validation_selected.extend(current_selected)
+        validation_reports.append(
+            {
+                "validation_cut": validation_cut,
+                "train_cuts": train_cuts,
+                "selected_counts": dict(sorted(Counter(current_selected).items())),
+                "candidate_metric": metric_mean(current_validation_rows, current_selected, metric),
+                "fallback_metric": metric_mean(
+                    current_validation_rows,
+                    fixed_selection(current_validation_rows, fallback_family),
+                    metric,
+                ),
+                "allowed_series": [
+                    series_id for series_id, item in current_gate.items() if item["allowed"]
+                ],
+                "blocked_series": [
+                    series_id for series_id, item in current_gate.items() if not item["allowed"]
+                ],
+            }
+        )
+
+    gate = series_validation_gate(
+        validation_rows=validation_rows,
+        candidate_selected=validation_selected,
+        fallback_family=fallback_family,
+        metric=metric,
+        min_series_validation_lift=min_series_validation_lift,
+    )
+    if require_each_cut:
+        for series_id, item in gate.items():
+            failing_cuts = [
+                validation_cut
+                for validation_cut, cut_gate in per_cut_gates
+                if not cut_gate[series_id]["allowed"]
+            ]
+            item["aggregate_allowed"] = item["allowed"]
+            item["failing_validation_cuts"] = failing_cuts
+            item["allowed"] = item["allowed"] and not failing_cuts
+    return gate, validation_reports
+
+
 def selection_for_cut(
     *,
     cut: int,
@@ -114,7 +203,12 @@ def selection_for_cut(
     prior_cuts = [prior for prior in cuts if prior < cut]
     eval_rows = cut_rows[cut]
     fallback_config = CandidateConfig(name=f"fixed:{fallback_family}", kind="fixed", family=fallback_family)
-    if policy not in {"validation_gated", "series_guarded"}:
+    if policy not in {
+        "validation_gated",
+        "series_guarded",
+        "series_multicut_guarded",
+        "series_multicut_worst_guarded",
+    }:
         raise ValueError(f"unsupported policy: {policy}")
 
     if not prior_cuts:
@@ -174,6 +268,8 @@ def selection_for_cut(
         softmax_steps=softmax_steps,
     )
     series_gate = None
+    series_gate_source = None
+    series_gate_validation_reports = None
     if policy == "series_guarded" and should_route:
         validation_selected = select_candidate(
             selected_config,
@@ -190,6 +286,25 @@ def selection_for_cut(
             metric=metric,
             min_series_validation_lift=min_series_validation_lift,
         )
+        series_gate_source = "latest_prior_validation_cut"
+    elif policy in {"series_multicut_guarded", "series_multicut_worst_guarded"} and should_route:
+        series_gate, series_gate_validation_reports = multicut_series_validation_gate(
+            selected_config=selected_config,
+            prior_cuts=prior_cuts,
+            cut_rows=cut_rows,
+            families=families,
+            fallback_family=fallback_family,
+            metric=metric,
+            min_series_validation_lift=min_series_validation_lift,
+            softmax_steps=softmax_steps,
+            require_each_cut=policy == "series_multicut_worst_guarded",
+        )
+        if policy == "series_multicut_worst_guarded":
+            series_gate_source = "all_prior_chronological_validation_cuts_require_each_cut"
+        else:
+            series_gate_source = "all_prior_chronological_validation_cuts"
+
+    if series_gate is not None:
         selected = [
             selected_family if series_gate[str(row["series_id"])]["allowed"] else fallback_family
             for row, selected_family in zip(eval_rows, selected)
@@ -213,11 +328,14 @@ def selection_for_cut(
         allowed = [series_id for series_id, item in series_gate.items() if item["allowed"]]
         blocked = [series_id for series_id, item in series_gate.items() if not item["allowed"]]
         decision["series_gate"] = {
+            "source": series_gate_source,
             "min_series_validation_lift": min_series_validation_lift,
             "allowed_series": allowed,
             "blocked_series": blocked,
             "per_series": series_gate,
         }
+        if series_gate_validation_reports is not None:
+            decision["series_gate"]["validation_reports"] = series_gate_validation_reports
     return decision, selected
 
 
@@ -337,6 +455,16 @@ def ranked_series_contributions(
 
 
 def report_verdict(policy: str) -> str:
+    if policy == "series_multicut_worst_guarded":
+        return (
+            "Worst-cut series gating blocks any series with a prior cut-level "
+            "regression; promotion still requires broader positive coverage."
+        )
+    if policy == "series_multicut_guarded":
+        return (
+            "Multi-cut series gating tests broader prior evidence, but promotion "
+            "still requires stable gains across cuts and series."
+        )
     if policy == "series_guarded":
         return (
             "Series-aware gating improves the validation-gated router, but "
