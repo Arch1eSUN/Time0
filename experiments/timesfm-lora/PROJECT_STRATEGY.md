@@ -437,3 +437,26 @@ SMAPE and series-aware guards remain negative, so the next step is feature
 ablation followed by a risk policy that preserves MAE lift without series-level
 regressions.
 ```
+
+Feature ablation checkpoint:
+
+```text
+best feature preset: alignment-normalized
+validation-gated routed MAE: 0.0917558798
+validation-gated MAE delta vs fallback: 0.0002674001
+validation-gated SMAPE delta vs fallback: 0.0001627004
+series-guarded routed MAE delta vs fallback: 0.0000148190
+best diagnostic routed MAE delta vs fallback: 0.0004631997
+```
+
+Conclusion:
+
+```text
+The useful signal comes from prediction-context alignment plus normalized
+prediction disagreement, not from using every runtime feature. Standalone
+normalized disagreement is harmful, and context_regime reduces the best
+alignment-normalized result when added back. The current best feature seam is
+alignment-normalized. Promotion remains blocked because series-aware lift is
+positive but too small; tune series-risk policy around this feature surface
+before training more LoRA adapters.
+```

@@ -109,6 +109,7 @@ Stop a training direction when any of these happens:
 | `recency-weighted series risk` | `realized_vol_20` | Diagnostic tie, not Promotion Ready | decay 0.1 ties the latest-cut series guard at 0.0002025053 MAE delta over fallback; higher decay degrades as older evidence hides recent failures |
 | `early rolling grid` | `realized_vol_20` | Useful negative result | adding cuts 3000/3250 creates 5500 rows and 6.99% leaky oracle headroom, but validation-gated policies underperform fixed recent2000 |
 | `no-leak regime features` | `realized_vol_20` | First positive MAE router milestone, not Promotion Ready | validation-gated routed MAE improves fixed recent2000 by 0.0002508807 on early grid, but SMAPE and series-aware guards still regress |
+| `feature ablation alignment-normalized` | `realized_vol_20` | Best router feature surface so far, not Promotion Ready | alignment-normalized improves fixed recent2000 on MAE, SMAPE, and series-guarded MAE, but series-aware lift is only 0.0000148190 |
 
 Recommendation: stop increasing steps on `level`. Treat `realized_vol_20` as
 the first clean target signal, but do not promote it until distribution shift
@@ -192,5 +193,9 @@ features were added next through context-regime, normalized disagreement, and
 prediction-context alignment features. They produced the first positive default
 MAE validation-gated router on the early grid, but SMAPE and series-aware guards
 remain negative. The next useful step is feature ablation plus a risk policy that
-preserves MAE lift without series-level regressions.
+preserves MAE lift without series-level regressions. Feature ablation showed
+`alignment-normalized` is the best surface: it improves MAE, SMAPE, and
+series-guarded MAE over fixed `recent2000`, but the series-aware lift remains
+too small for promotion. The next useful step is series-risk tuning on
+`alignment-normalized`, not more raw context features.
 ```
