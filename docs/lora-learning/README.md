@@ -32,3 +32,4 @@ Each note should answer four questions:
 - [019 - Full Prediction Archive Export](./019-full-prediction-archive-export.md)
 - [020 - Router Training Rows](./020-router-training-rows.md)
 - [021 - No-Leak Router And Fail-Closed Selection](./021-no-leak-router-fail-closed.md)
+- [022 - Expanded Rolling Grid And Router Evidence](./022-expanded-rolling-grid.md)

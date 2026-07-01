@@ -6,7 +6,16 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
-from export_prediction_archives import ADAPTERS, CUTS, FAMILIES, ArchiveJob, predictions_path
+from rolling_grid import (
+    ALL_CUTS,
+    FAMILIES,
+    GRID_CHOICES,
+    ArchiveJob,
+    adapter_dir_for,
+    predictions_path,
+    selected_cuts,
+    selected_families,
+)
 
 
 FORBIDDEN_RUNTIME_KEYS = {"actual", "mae", "smape", "best_family", "family_errors", "label"}
@@ -18,7 +27,8 @@ def parse_args() -> argparse.Namespace:
         "--output",
         default="reports/router-rows-market-macro-realized-vol-20-h20-r4.json",
     )
-    parser.add_argument("--cut", action="append", type=int, choices=CUTS)
+    parser.add_argument("--grid", choices=GRID_CHOICES, default="base")
+    parser.add_argument("--cut", action="append", type=int, choices=ALL_CUTS)
     parser.add_argument("--family", action="append", choices=FAMILIES)
     return parser.parse_args()
 
@@ -34,14 +44,10 @@ def experiment_path(path: str) -> Path:
     return experiment_root() / raw_path
 
 
-def selected_values(values: tuple[int, ...] | tuple[str, ...], selected: list[int] | list[str] | None) -> list:
-    if not selected:
-        return list(values)
-    return [value for value in values if value in selected]
-
-
 def archive_path(family: str, cut: int) -> Path:
-    return experiment_root() / predictions_path(ArchiveJob(family=family, cut=cut, adapter_dir=ADAPTERS[family][cut]))
+    return experiment_root() / predictions_path(
+        ArchiveJob(family=family, cut=cut, adapter_dir=adapter_dir_for(family, cut))
+    )
 
 
 def load_archive(*, family: str, cut: int) -> dict[str, Any]:
@@ -282,8 +288,8 @@ def build_router_rows(*, cuts: list[int], families: list[str]) -> dict[str, Any]
 
 def main() -> None:
     args = parse_args()
-    cuts = selected_values(CUTS, args.cut)
-    families = selected_values(FAMILIES, args.family)
+    cuts = selected_cuts(grid=args.grid, selected=args.cut)
+    families = selected_families(args.family)
     report = build_router_rows(cuts=cuts, families=families)
 
     output = experiment_path(args.output)

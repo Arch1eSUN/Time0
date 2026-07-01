@@ -294,9 +294,22 @@ Promotion remains blocked. The next useful experiment is more chronological
 router supervision through an expanded rolling cut grid.
 ```
 
+Expanded rolling grid checkpoint:
+
+```text
+expanded router rows generated: 4500
+expanded cuts: 3500,3750,4000,4250,4500,4750,5000,5250,5500
+fixed recent2000 routed-cuts MAE improvement: 1.987592%
+validation-gated routed-cuts MAE improvement: 2.116398%
+extra MAE delta over fallback: 0.0001260041
+leaky per-window oracle all-cuts MAE improvement: 7.289511%
+```
+
 Conclusion:
 
 ```text
-The local router source dataset is ready. The next missing artifact is a joiner
-that produces one no-leak router row per cut/window_id.
+The expanded grid makes the router signal more credible, but the publishable
+gain is still too small. The project should inspect per-series expanded router
+attribution before Moirai integration, Hugging Face publication, or larger LoRA
+rank.
 ```

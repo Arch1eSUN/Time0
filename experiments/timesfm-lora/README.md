@@ -87,6 +87,7 @@ prediction archive: evaluation interface now records per-window features, predic
 full archive export: 15 aligned archives and 7500 records are available locally for joiner work.
 router rows: 1500 no-leak checked rows are available locally; leaky per-window oracle reaches 5.95% MAE headroom.
 prediction router: learned no-leak router did not beat fixed recent2000; validation-gated policy correctly stayed on fallback.
+expanded rolling grid: 4500 router rows across 9 cuts; validation-gated routing reaches 2.116398% routed MAE gain, but only adds 0.131419% relative lift over fixed recent2000 fallback.
 ```
 
 ## Data Contract
@@ -196,6 +197,22 @@ No-leak prediction router evaluation:
 uv run python scripts/evaluate_prediction_router.py \
   --input reports/router-rows-market-macro-realized-vol-20-h20-r4.json \
   --output reports/no-leak-prediction-router-market-macro-realized-vol-20-h20-r4.json
+```
+
+Expanded rolling grid:
+
+```bash
+uv run python scripts/train_rolling_grid_adapters.py --grid expanded
+
+uv run python scripts/export_prediction_archives.py --grid expanded
+
+uv run python scripts/join_prediction_archives.py \
+  --grid expanded \
+  --output reports/router-rows-expanded-market-macro-realized-vol-20-h20-r4.json
+
+uv run python scripts/evaluate_prediction_router.py \
+  --input reports/router-rows-expanded-market-macro-realized-vol-20-h20-r4.json \
+  --output reports/no-leak-prediction-router-expanded-market-macro-realized-vol-20-h20-r4.json
 ```
 
 Selected dry run:

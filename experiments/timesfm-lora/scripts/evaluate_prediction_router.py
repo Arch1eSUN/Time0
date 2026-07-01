@@ -624,6 +624,25 @@ def learned_candidate_configs() -> list[CandidateConfig]:
     return configs
 
 
+def router_verdict(*, gated_metric: float, fallback_metric: float) -> str:
+    if gated_metric < fallback_metric:
+        return (
+            "Validation-gated routing improved the fallback, but promotion remains "
+            "blocked until gains over fallback are stable across future cuts and "
+            "per-series behavior is reviewed."
+        )
+    if gated_metric > fallback_metric:
+        return (
+            "Validation-gated routing underperformed the fallback. Keep the fixed "
+            "fallback adapter until learned routing clears prior-cut validation."
+        )
+    return (
+        "No learned prediction-level router is promotion-ready. The "
+        "validation-gated policy kept the fallback because learned routing did "
+        "not clear the prior-cut validation lift requirement."
+    )
+
+
 def build_report(args: argparse.Namespace) -> dict[str, Any]:
     input_path = experiment_path(args.input)
     source = load_router_rows(input_path)
@@ -706,10 +725,9 @@ def build_report(args: argparse.Namespace) -> dict[str, Any]:
                 "selected_metric_improvement_vs_zero_shot"
             ],
             "validation_gated_delta_vs_fallback_metric": fallback_metric - gated_metric,
-            "verdict": (
-                "No learned prediction-level router is promotion-ready. The "
-                "validation-gated policy keeps the fallback when learned routing "
-                "does not clear the prior-cut validation lift requirement."
+            "verdict": router_verdict(
+                gated_metric=float(gated_metric),
+                fallback_metric=float(fallback_metric),
             ),
         },
     }
