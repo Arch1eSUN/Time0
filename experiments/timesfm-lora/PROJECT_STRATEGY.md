@@ -372,3 +372,23 @@ contributor. The best policy remains latest-cut series_guarded with
 min_series_validation_lift=0.0. The next experiment should test a
 recency-weighted series-risk penalty, not a stricter hard gate.
 ```
+
+Recency-weighted series-risk checkpoint:
+
+```text
+series_risk_penalized decay 0.05 MAE delta over fallback: 0.0002025053
+series_risk_penalized decay 0.10 MAE delta over fallback: 0.0002025053
+series_risk_penalized decay 0.25 MAE delta over fallback: 0.0001436530
+series_risk_penalized decay 0.50 MAE delta over fallback: 0.0001260041
+latest-cut series_guarded MAE delta over fallback: 0.0002025053
+```
+
+Conclusion:
+
+```text
+Recency-weighted series risk confirms that recent validation evidence must
+dominate older cut evidence. With decay 0.1, the risk policy keeps DFF and blocks
+DGS10/SP500 at cut4250, tying the latest-cut guard. It does not create new net
+lift. Further hard-gate tuning is low leverage until the grid has more early
+chronological supervision or richer no-leak runtime features.
+```

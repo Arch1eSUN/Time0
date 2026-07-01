@@ -106,6 +106,7 @@ Stop a training direction when any of these happens:
 | `expanded router attribution` | `realized_vol_20` | Promotion still blocked | DFF contributes 148.70% of net router delta, while DGS10 and SP500 regress vs fallback; gain is concentrated rather than broad |
 | `series-aware router guard` | `realized_vol_20` | Best router policy so far, not Promotion Ready | per-series guard improves routed MAE delta over fixed recent2000 to 0.0002025053, but still leaves negative series and uses only one prior validation cut |
 | `multi-cut series guard` | `realized_vol_20` | Useful negative result | aggregate multi-cut does not improve over validation-gated; worst-cut reaches 0.0001749690 MAE delta over fallback but underperforms latest-cut series guard |
+| `recency-weighted series risk` | `realized_vol_20` | Diagnostic tie, not Promotion Ready | decay 0.1 ties the latest-cut series guard at 0.0002025053 MAE delta over fallback; higher decay degrades as older evidence hides recent failures |
 
 Recommendation: stop increasing steps on `level`. Treat `realized_vol_20` as
 the first clean target signal, but do not promote it until distribution shift
@@ -179,5 +180,7 @@ Promotion remains blocked; the next router policy should use multi-cut series
 validation or an explicit series-risk penalty. Multi-cut validation was tested
 next: aggregate multi-cut diluted local failures, while worst-cut over-blocked
 DFF. The best policy remains latest-cut `series_guarded`; the next router policy
-should use a recency-weighted series-risk penalty.
+should use a recency-weighted series-risk penalty. That penalty was tested and
+tied, but did not beat, latest-cut `series_guarded`. The next useful step is
+more early chronological supervision or richer no-leak runtime features.
 ```
