@@ -49,3 +49,4 @@ Each note should answer four questions:
 - [036 - Generalization Check](./036-generalization-check.md)
 - [037 - Frozen Policy vs Sensitivity Sweep](./037-frozen-policy-vs-sensitivity-sweep.md)
 - [038 - Guarded Fallback Veto](./038-guarded-fallback-veto.md)
+- [039 - Later Archive Retest](./039-later-archive-retest.md)
