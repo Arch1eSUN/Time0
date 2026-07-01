@@ -332,3 +332,23 @@ The router has localized signal but not broad reliability. Publication remains
 blocked. The next experiment should test a series-aware validation gate that
 prevents learned routing on series with negative prior-validation behavior.
 ```
+
+Series-aware router-guard checkpoint:
+
+```text
+best tested policy: series_guarded
+best min_series_validation_lift: 0.0
+routed MAE delta over fixed recent2000: 0.0002025053
+routed improvement vs zero-shot: 2.194601%
+validation-gated routed MAE delta over fallback: 0.0001260041
+blocked at cut4250: DGS10, SP500
+```
+
+Conclusion:
+
+```text
+Series-aware gating improves the router and is the best valid policy so far,
+but it is still not publishable. A one-cut series gate is too thin: it blocks
+DGS10/SP500 at cut4250, but does not catch all series risk earlier. The next
+experiment should test multi-cut series validation or a series-risk penalty.
+```

@@ -31,9 +31,11 @@ def parse_args() -> argparse.Namespace:
         default="reports/router-attribution-expanded-market-macro-realized-vol-20-h20-r4.json",
     )
     parser.add_argument("--metric", choices=["mae", "smape"], default="mae")
+    parser.add_argument("--policy", choices=["validation_gated", "series_guarded"], default="validation_gated")
     parser.add_argument("--cold-start-family", default="recent2000")
     parser.add_argument("--fallback-family", default="recent2000")
     parser.add_argument("--min-validation-lift", type=float, default=0.01)
+    parser.add_argument("--min-series-validation-lift", type=float, default=0.0)
     parser.add_argument("--softmax-steps", type=int, default=2000)
     return parser.parse_args()
 
@@ -55,6 +57,45 @@ def mean(values: list[float]) -> float:
     return sum(values) / len(values)
 
 
+def metric_mean(rows: list[dict[str, Any]], selected_families: list[str], metric: MetricName) -> float:
+    if len(rows) != len(selected_families):
+        raise ValueError("row and selection lengths differ")
+    return mean([family_error(row, family, metric) for row, family in zip(rows, selected_families)])
+
+
+def series_validation_gate(
+    *,
+    validation_rows: list[dict[str, Any]],
+    candidate_selected: list[str],
+    fallback_family: str,
+    metric: MetricName,
+    min_series_validation_lift: float,
+) -> dict[str, dict[str, Any]]:
+    grouped: dict[str, list[tuple[dict[str, Any], str]]] = defaultdict(list)
+    for row, selected_family in zip(validation_rows, candidate_selected):
+        grouped[str(row["series_id"])].append((row, selected_family))
+
+    gate: dict[str, dict[str, Any]] = {}
+    for series_id, pairs in sorted(grouped.items()):
+        rows = [row for row, _selected_family in pairs]
+        selected = [selected_family for _row, selected_family in pairs]
+        fallback = [fallback_family for _row in rows]
+        candidate_metric = metric_mean(rows, selected, metric)
+        fallback_metric = metric_mean(rows, fallback, metric)
+        required_metric = fallback_metric * (1.0 - min_series_validation_lift)
+        allowed = candidate_metric <= required_metric
+        gate[series_id] = {
+            "validation_windows": len(rows),
+            "candidate_metric": candidate_metric,
+            "fallback_metric": fallback_metric,
+            "required_metric_to_allow": required_metric,
+            "min_series_validation_lift": min_series_validation_lift,
+            "allowed": allowed,
+            "selected_counts": dict(sorted(Counter(selected).items())),
+        }
+    return gate
+
+
 def selection_for_cut(
     *,
     cut: int,
@@ -63,20 +104,25 @@ def selection_for_cut(
     families: list[str],
     learned_configs: list[CandidateConfig],
     metric: MetricName,
+    policy: str,
     cold_start_family: str,
     fallback_family: str,
     min_validation_lift: float,
+    min_series_validation_lift: float,
     softmax_steps: int,
 ) -> tuple[dict[str, Any], list[str]]:
     prior_cuts = [prior for prior in cuts if prior < cut]
     eval_rows = cut_rows[cut]
     fallback_config = CandidateConfig(name=f"fixed:{fallback_family}", kind="fixed", family=fallback_family)
+    if policy not in {"validation_gated", "series_guarded"}:
+        raise ValueError(f"unsupported policy: {policy}")
 
     if not prior_cuts:
         decision = {
             "mode": "cold_start",
             "selected_config": f"fixed:{cold_start_family}",
             "prior_cuts": prior_cuts,
+            "policy": policy,
         }
         return decision, fixed_selection(eval_rows, cold_start_family)
 
@@ -85,6 +131,7 @@ def selection_for_cut(
             "mode": "fallback_no_validation_cut",
             "selected_config": fallback_config.name,
             "prior_cuts": prior_cuts,
+            "policy": policy,
         }
         return decision, fixed_selection(eval_rows, fallback_family)
 
@@ -126,6 +173,28 @@ def selection_for_cut(
         metric=metric,
         softmax_steps=softmax_steps,
     )
+    series_gate = None
+    if policy == "series_guarded" and should_route:
+        validation_selected = select_candidate(
+            selected_config,
+            train_rows,
+            validation_rows,
+            families=families,
+            metric=metric,
+            softmax_steps=softmax_steps,
+        )
+        series_gate = series_validation_gate(
+            validation_rows=validation_rows,
+            candidate_selected=validation_selected,
+            fallback_family=fallback_family,
+            metric=metric,
+            min_series_validation_lift=min_series_validation_lift,
+        )
+        selected = [
+            selected_family if series_gate[str(row["series_id"])]["allowed"] else fallback_family
+            for row, selected_family in zip(eval_rows, selected)
+        ]
+
     decision = {
         "mode": "validation_gated",
         "prior_cuts": prior_cuts,
@@ -138,7 +207,17 @@ def selection_for_cut(
         "required_metric_to_switch": required_metric,
         "min_validation_lift": min_validation_lift,
         "selected_config": selected_config.name,
+        "policy": policy,
     }
+    if series_gate is not None:
+        allowed = [series_id for series_id, item in series_gate.items() if item["allowed"]]
+        blocked = [series_id for series_id, item in series_gate.items() if not item["allowed"]]
+        decision["series_gate"] = {
+            "min_series_validation_lift": min_series_validation_lift,
+            "allowed_series": allowed,
+            "blocked_series": blocked,
+            "per_series": series_gate,
+        }
     return decision, selected
 
 
@@ -257,6 +336,15 @@ def ranked_series_contributions(
     return sorted(ranked, key=lambda item: item[delta_sum_key], reverse=True)
 
 
+def report_verdict(policy: str) -> str:
+    if policy == "series_guarded":
+        return (
+            "Series-aware gating improves the validation-gated router, but "
+            "promotion remains blocked until gains are broad and stable."
+        )
+    return "Router lift over fallback is concentrated and remains too small for promotion."
+
+
 def build_report(args: argparse.Namespace) -> dict[str, Any]:
     input_path = experiment_path(args.input)
     source = load_router_rows(input_path)
@@ -281,9 +369,11 @@ def build_report(args: argparse.Namespace) -> dict[str, Any]:
             families=families,
             learned_configs=learned_configs,
             metric=args.metric,
+            policy=args.policy,
             cold_start_family=args.cold_start_family,
             fallback_family=args.fallback_family,
             min_validation_lift=args.min_validation_lift,
+            min_series_validation_lift=args.min_series_validation_lift,
             softmax_steps=args.softmax_steps,
         )
         cut_records = attribution_records(
@@ -321,18 +411,20 @@ def build_report(args: argparse.Namespace) -> dict[str, Any]:
     negative_series = [item for item in ranked_routed_series if item[delta_sum_key] < 0]
 
     return {
-        "method": "validation_gated_router_per_series_attribution",
+        "method": f"{args.policy}_router_per_series_attribution",
         "input": str(input_path),
         "selection_metric": args.metric,
+        "policy": args.policy,
         "cold_start_family": args.cold_start_family,
         "fallback_family": args.fallback_family,
         "min_validation_lift": args.min_validation_lift,
+        "min_series_validation_lift": args.min_series_validation_lift,
         "cuts": cuts,
         "families": families,
         "rows": len(records),
         "guardrail": (
-            "Attribution recomputes validation-gated routing using prior cuts only. "
-            "Actual errors are used only after selection to score series-level outcomes."
+            "Attribution recomputes routing using prior cuts only. Actual "
+            "errors are used only after selection to score series-level outcomes."
         ),
         "summary": {
             "all_cuts": summarize_records(records, metric=args.metric),
@@ -341,10 +433,7 @@ def build_report(args: argparse.Namespace) -> dict[str, Any]:
             "negative_routed_series_count": len(negative_series),
             "top_positive_series": positive_series[:3],
             "top_negative_series": list(reversed(negative_series[-3:])),
-            "verdict": (
-                "Router lift over fallback is concentrated and remains too small "
-                "for promotion."
-            ),
+            "verdict": report_verdict(args.policy),
         },
         "per_series": {
             "all_cuts": all_per_series,

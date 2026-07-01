@@ -34,3 +34,4 @@ Each note should answer four questions:
 - [021 - No-Leak Router And Fail-Closed Selection](./021-no-leak-router-fail-closed.md)
 - [022 - Expanded Rolling Grid And Router Evidence](./022-expanded-rolling-grid.md)
 - [023 - Router Attribution: Who Helped And Who Got Hurt?](./023-router-attribution.md)
+- [024 - Series-Aware Router Guard](./024-series-aware-router-guard.md)

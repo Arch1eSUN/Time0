@@ -104,6 +104,7 @@ Stop a training direction when any of these happens:
 | `prediction-level router` | `realized_vol_20` | Learned router not promotion-ready | best learned routed-cuts MAE gain is 1.20%, below fixed recent2000 at 1.51%; validation-gated policy correctly stays on fallback |
 | `expanded rolling prediction router` | `realized_vol_20` | Promising, not Promotion Ready | expanded grid has 4500 rows across 9 cuts; validation-gated routed MAE gain is 2.12% vs zero-shot, but extra lift over fixed recent2000 is only 0.000126 MAE |
 | `expanded router attribution` | `realized_vol_20` | Promotion still blocked | DFF contributes 148.70% of net router delta, while DGS10 and SP500 regress vs fallback; gain is concentrated rather than broad |
+| `series-aware router guard` | `realized_vol_20` | Best router policy so far, not Promotion Ready | per-series guard improves routed MAE delta over fixed recent2000 to 0.0002025053, but still leaves negative series and uses only one prior validation cut |
 
 Recommendation: stop increasing steps on `level`. Treat `realized_vol_20` as
 the first clean target signal, but do not promote it until distribution shift
@@ -170,5 +171,9 @@ is only 0.000126 MAE. Promotion remains blocked until per-series behavior and
 future-cut stability prove the router gain is not noise. Per-series attribution
 shows the current lift is concentrated: `DFF` contributes more than the total
 net gain, while `DGS10` and `SP500` regress vs fallback. The next policy test
-should add a series-aware validation gate.
+should add a series-aware validation gate. The first series-aware guard improves
+the routed MAE delta over fallback from 0.0001260041 to 0.0002025053 and blocks
+`DGS10`/`SP500` at cut4250, but it still misses some series risk at cut4000.
+Promotion remains blocked; the next router policy should use multi-cut series
+validation or an explicit series-risk penalty.
 ```
