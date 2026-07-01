@@ -102,6 +102,7 @@ regime-full router manifest: shared-positive two-horizon fallback-veto policy is
 zscore second target archive: full LoRA has small base-grid MAE value, but learned no-leak router does not beat fixed full fallback.
 zscore recent2000 candidate: expanded candidate pool increases oracle headroom and gives a small SMAPE-gated signal, but MAE routing still fails closed.
 zscore all-recent pool: five-family oracle headroom increases, but MAE routing still fails closed and SMAPE wins are fallback-sensitive.
+fallback sensitivity guard: zscore recent2000 SMAPE is partial-positive, while the wider all-recent pool is fallback-sensitive and remains blocked.
 ```
 
 ## Data Contract
