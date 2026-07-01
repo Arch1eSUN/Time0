@@ -43,6 +43,7 @@ def parse_args() -> argparse.Namespace:
             "fallback_veto",
             "fallback_veto_series_guarded",
             "fallback_veto_latest_cut_guarded",
+            "fallback_veto_two_horizon_guarded",
         ],
         default="validation_gated",
     )
@@ -462,6 +463,74 @@ def latest_cut_selection_risk_gate(
     ]
 
 
+def two_horizon_selection_risk_gate(
+    *,
+    prior_cuts: list[int],
+    cut_rows: dict[int, list[dict[str, Any]]],
+    selected_by_cut: dict[int, list[str]],
+    fallback_family: str,
+    metric: MetricName,
+    min_series_validation_lift: float,
+    series_risk_decay: float,
+) -> tuple[dict[str, dict[str, Any]], list[dict[str, Any]]]:
+    recency_gate, recency_reports = recency_weighted_selection_risk_gate(
+        prior_cuts=prior_cuts,
+        cut_rows=cut_rows,
+        selected_by_cut=selected_by_cut,
+        fallback_family=fallback_family,
+        metric=metric,
+        min_series_validation_lift=min_series_validation_lift,
+        series_risk_decay=series_risk_decay,
+    )
+    latest_gate, latest_reports = latest_cut_selection_risk_gate(
+        prior_cuts=prior_cuts,
+        cut_rows=cut_rows,
+        selected_by_cut=selected_by_cut,
+        fallback_family=fallback_family,
+        metric=metric,
+        min_series_validation_lift=min_series_validation_lift,
+    )
+
+    gate: dict[str, dict[str, Any]] = {}
+    for series_id in sorted(set(recency_gate) | set(latest_gate)):
+        recency_item = recency_gate[series_id]
+        latest_item = latest_gate[series_id]
+        allowed = bool(recency_item["allowed"]) and bool(latest_item["allowed"])
+        gate[series_id] = {
+            "validation_cuts": recency_item["validation_cuts"],
+            "weighted_candidate_metric": recency_item["weighted_candidate_metric"],
+            "weighted_fallback_metric": recency_item["weighted_fallback_metric"],
+            "weighted_relative_lift": recency_item["weighted_relative_lift"],
+            "weighted_mean_relative_lift": recency_item["weighted_mean_relative_lift"],
+            "latest_candidate_metric": latest_item["candidate_metric"],
+            "latest_fallback_metric": latest_item["fallback_metric"],
+            "latest_relative_lift": recency_item["latest_relative_lift"],
+            "recency_allowed": recency_item["allowed"],
+            "latest_allowed": latest_item["allowed"],
+            "allowed": allowed,
+            "risk_score": min(
+                float(recency_item["risk_score"]),
+                float(recency_item["latest_relative_lift"]),
+            ),
+            "required_metric_to_allow": recency_item["required_metric_to_allow"],
+            "min_series_validation_lift": min_series_validation_lift,
+            "series_risk_decay": series_risk_decay,
+            "cut_details": recency_item["cut_details"],
+            "latest_cut_detail": latest_item,
+        }
+
+    return gate, [
+        {
+            "horizon": "recency_weighted",
+            "reports": recency_reports,
+        },
+        {
+            "horizon": "latest_cut",
+            "reports": latest_reports,
+        },
+    ]
+
+
 def selection_for_cut(
     *,
     cut: int,
@@ -493,6 +562,7 @@ def selection_for_cut(
         "fallback_veto",
         "fallback_veto_series_guarded",
         "fallback_veto_latest_cut_guarded",
+        "fallback_veto_two_horizon_guarded",
     }:
         raise ValueError(f"unsupported policy: {policy}")
 
@@ -606,6 +676,7 @@ def selection_for_cut(
         "fallback_veto",
         "fallback_veto_series_guarded",
         "fallback_veto_latest_cut_guarded",
+        "fallback_veto_two_horizon_guarded",
     } and should_route:
         base_selections: dict[int, dict[str, Any]] = {}
         for prior_cut in prior_cuts:
@@ -654,7 +725,11 @@ def selection_for_cut(
             "veto_k": veto_k,
             "veto_regret_threshold": veto_regret_threshold,
         }
-        if policy in {"fallback_veto_series_guarded", "fallback_veto_latest_cut_guarded"}:
+        if policy in {
+            "fallback_veto_series_guarded",
+            "fallback_veto_latest_cut_guarded",
+            "fallback_veto_two_horizon_guarded",
+        }:
             guarded_selected_by_cut: dict[int, list[str]] = {}
             for prior_cut in prior_cuts:
                 _guarded_decision, guarded_selected = selection_for_cut(
@@ -687,7 +762,7 @@ def selection_for_cut(
                     series_risk_decay=series_risk_decay,
                 )
                 series_gate_source = "recency_weighted_prior_fallback_veto_cuts"
-            else:
+            elif policy == "fallback_veto_latest_cut_guarded":
                 series_gate, series_gate_validation_reports = latest_cut_selection_risk_gate(
                     prior_cuts=prior_cuts,
                     cut_rows=cut_rows,
@@ -697,6 +772,17 @@ def selection_for_cut(
                     min_series_validation_lift=min_series_validation_lift,
                 )
                 series_gate_source = "latest_prior_fallback_veto_cut"
+            else:
+                series_gate, series_gate_validation_reports = two_horizon_selection_risk_gate(
+                    prior_cuts=prior_cuts,
+                    cut_rows=cut_rows,
+                    selected_by_cut=guarded_selected_by_cut,
+                    fallback_family=fallback_family,
+                    metric=metric,
+                    min_series_validation_lift=min_series_validation_lift,
+                    series_risk_decay=series_risk_decay,
+                )
+                series_gate_source = "two_horizon_prior_fallback_veto_cuts"
 
     if series_gate is not None:
         selected = [
@@ -872,6 +958,11 @@ def report_verdict(policy: str) -> str:
         return (
             "Latest-cut guarded fallback-veto reacts to the most recent "
             "per-series downside; promotion still requires temporal stability."
+        )
+    if policy == "fallback_veto_two_horizon_guarded":
+        return (
+            "Two-horizon guarded fallback-veto requires both latest-cut and "
+            "recency-weighted per-series safety before overriding fallback."
         )
     if policy == "series_multicut_worst_guarded":
         return (

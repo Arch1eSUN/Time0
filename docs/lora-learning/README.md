@@ -51,3 +51,4 @@ Each note should answer four questions:
 - [038 - Guarded Fallback Veto](./038-guarded-fallback-veto.md)
 - [039 - Later Archive Retest](./039-later-archive-retest.md)
 - [040 - Latest-Cut Downside Guard](./040-latest-cut-downside-guard.md)
+- [041 - Two-Horizon Temporal Guard](./041-two-horizon-temporal-guard.md)
