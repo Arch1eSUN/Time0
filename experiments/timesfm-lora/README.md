@@ -17,10 +17,12 @@ flowchart LR
   A["FRED public market and macro series"] --> B["fetch_fred_market_data.py"]
   B --> C["Long CSV: series_id,timestamp,field,value"]
   C --> D["evaluate_naive.py"]
-  C --> E["finetune_lora.py"]
-  E --> F["LoRA adapter"]
-  D --> G["Baseline report"]
-  F --> H["Future Moirai ForecastRequest -> ForecastResult adapter"]
+  C --> E["write_normalized_series_csv.py"]
+  C --> F["finetune_lora.py"]
+  E --> F
+  F --> G["LoRA adapter"]
+  D --> H["Baseline report"]
+  G --> I["Future Moirai ForecastRequest -> ForecastResult adapter"]
 ```
 
 ## Epistemic Split
@@ -57,6 +59,7 @@ Current verdict:
 level LoRA: failed candidate success; stop increasing steps for this target.
 log_change LoRA: partial signal; MAE improved slightly, SMAPE regressed.
 realized_vol_20 LoRA: positive rolling signal, but cut5500 distribution shift blocks promotion.
+normalized realized_vol_20 LoRA: diagnostic useful, but failed to fix cut5500.
 ```
 
 ## Data Contract

@@ -93,6 +93,7 @@ Stop a training direction when any of these happens:
 | `market-macro-level-h20-r4-step1000-balanced` | `level` | Failed Candidate Success | worse than step200; likely overfit or over-trained |
 | `market-macro-log-change-h20-r4-step200-balanced` | `log_change` | Partial signal, not success | MAE improves slightly, SMAPE regresses |
 | `market-macro-realized-vol-20-h20-r4-step200-*` | `realized_vol_20` | Rolling positive, not Promotion Ready | improves all 3 balanced cut-points, but average MAE gain is 1.52%; per-series average is negative for DEXUSEU and DGS10 |
+| `market-macro-realized-vol-20-zscore-h20-r4-step200-*` | `realized_vol_20_zscore_train*` | Diagnostic failed to promote | normalized average MAE gain is 0.98%; cut5500 regresses and only improves 3 of 10 series |
 
 Recommendation: stop increasing steps on `level`. Treat `realized_vol_20` as
 the first clean target signal, but do not promote it until distribution shift
@@ -120,7 +121,10 @@ Next validation:
 
 ```text
 field=realized_vol_20
-per-series rolling metrics
+training_window=recent-only rolling windows before each cut-point
+lora_r=4
+lora_alpha=8
+max_steps=200
 ```
 
 Reason:
@@ -130,5 +134,8 @@ The realized_vol_20 adapter family improved all 3 balanced rolling cut-points,
 but the average gain stayed below the 2% Promotion Ready threshold.
 Per-series evidence shows that cut5500 only improved 3 of 10 series.
 Distribution diagnostics show mixed regime shift at cut5500.
-The next decision should test normalization before changing rank or publishing.
+Per-series z-score normalization did not fix cut5500 and lowered average MAE
+improvement to 0.98%.
+The next decision should test recency-limited fine-tuning before changing rank
+or publishing.
 ```

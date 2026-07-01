@@ -165,15 +165,16 @@ Before publishing:
 
 ## Immediate Next Step
 
-Test normalization before increasing LoRA capacity:
+Test recent-window fine-tuning before increasing LoRA capacity:
 
 ```text
 field=realized_vol_20
+training_window=recent-only rolling windows before holdout
 lora_r=4
 lora_alpha=8
 max_steps=200
 balanced holdout cut-points: skip_windows=4000, 5000, 5500
-next missing evidence: normalized target robustness
+next missing evidence: recency robustness
 ```
 
 The `realized_vol_20` adapter family improved all 3 balanced rolling
@@ -181,5 +182,15 @@ cut-points, but average MAE improvement was `1.5158489425955908%`, below the 2%
 Promotion Ready threshold. Per-series attribution shows `DEXUSEU` and `DGS10`
 negative on average, and `cut5500` only improved 3 of 10 series. Promotion
 remains blocked. Distribution diagnostics show mixed cut5500 regime shift, so
-the next controlled experiment should test per-series normalization before
-larger LoRA rank.
+per-series normalization was tested before larger LoRA rank.
+
+The normalized target experiment did not fix the blocker:
+
+```text
+normalized rolling average MAE improvement: 0.978786%
+cut5500 normalized MAE improvement: -0.185%
+cut5500 per-series MAE wins: 3/10
+```
+
+The next controlled experiment should test whether recent-window fine-tuning
+handles the cut5500 regime mismatch better than full-history fine-tuning.
