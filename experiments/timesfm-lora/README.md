@@ -29,6 +29,7 @@ flowchart LR
   C --> E["write_normalized_series_csv.py"]
   C --> F["finetune_lora.py"]
   C --> L["evaluate_timesfm.py"]
+  L --> O["export_prediction_archives.py"]
   E --> F
   F --> G["LoRA adapter"]
   G --> L
@@ -79,6 +80,7 @@ recent3000 realized_vol_20 LoRA: negative result; improved cut4000 but weakened 
 recent1500 realized_vol_20 LoRA: fixed-window route failed; best window is split-dependent.
 historical adapter router: no-leak baseline failed; leaky oracle shows selection upside.
 prediction archive: evaluation interface now records per-window features, predictions, and actuals.
+full archive export: 15 aligned archives and 7500 records are available locally for joiner work.
 ```
 
 ## Data Contract
@@ -167,6 +169,22 @@ uv run python scripts/evaluate_timesfm.py \
   --skip-windows 5500 \
   --output reports/timesfm-lora-market-macro-realized-vol-20-h20-r4-step200-recent2000-train5500-holdout500-skip5500.json \
   --predictions-output reports/predictions-timesfm-lora-market-macro-realized-vol-20-h20-r4-step200-recent2000-train5500-holdout500-skip5500.json
+```
+
+Full router archive export:
+
+```bash
+uv run python scripts/export_prediction_archives.py
+```
+
+Selected dry run:
+
+```bash
+uv run python scripts/export_prediction_archives.py \
+  --dry-run \
+  --cut 4000 \
+  --family zero-shot \
+  --family recent2000
 ```
 
 ## Learning While Operating

@@ -165,14 +165,14 @@ Before publishing:
 
 ## Immediate Next Step
 
-Export full prediction archives before increasing LoRA capacity:
+Build a prediction archive joiner before increasing LoRA capacity:
 
 ```text
 field=realized_vol_20
-method=full prediction archive export
+method=prediction archive joiner
 candidate_adapters=full-history,recent1500,recent2000,recent3000
 selection_data=pre-holdout validation windows
-next missing evidence: joined router training rows
+next missing evidence: no-leak router training/evaluation rows
 ```
 
 The `realized_vol_20` adapter family improved all 3 balanced rolling
@@ -246,6 +246,22 @@ archive join key: window_id = series_id:start_index
 Conclusion:
 
 ```text
-The router data interface is ready. The next missing artifact is a full
-multi-adapter archive export plus a joiner that creates no-leak router rows.
+At this checkpoint, the router data interface became ready and the next missing
+artifact was a full multi-adapter archive export.
+```
+
+Full archive checkpoint:
+
+```text
+full archives exported: 15
+prediction records exported: 7500
+cuts aligned by window_id: 4000, 5000, 5500
+families per cut: zero-shot, full, recent1500, recent2000, recent3000
+```
+
+Conclusion:
+
+```text
+The local router source dataset is ready. The next missing artifact is a joiner
+that produces one no-leak router row per cut/window_id.
 ```

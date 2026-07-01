@@ -29,3 +29,4 @@ Each note should answer four questions:
 - [016 - Fixed Window Failed: Why Routing Is Next](./016-fixed-window-failed-routing-next.md)
 - [017 - No-Leak Adapter Routing](./017-no-leak-adapter-routing.md)
 - [018 - Prediction-Level Archives](./018-prediction-level-archives.md)
+- [019 - Full Prediction Archive Export](./019-full-prediction-archive-export.md)
