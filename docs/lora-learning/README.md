@@ -25,3 +25,4 @@ Each note should answer four questions:
 - [012 - Distribution Shift: Why Cut5500 Is Weak](./012-distribution-shift-and-regime.md)
 - [013 - Normalized Target: Why Scale Fix Did Not Fix Cut5500](./013-normalized-target-lora.md)
 - [014 - Recent-Window Training: Why Newer Data Helped Cut5500](./014-recent-window-lora.md)
+- [015 - Financial Domain: What Are We Actually Training?](./015-financial-domain-and-recent3000.md)

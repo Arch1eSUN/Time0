@@ -165,16 +165,16 @@ Before publishing:
 
 ## Immediate Next Step
 
-Test a longer recent-window before increasing LoRA capacity:
+Test a shorter recent-window or regime-aware routing before increasing LoRA capacity:
 
 ```text
 field=realized_vol_20
-training_window=recent3000 rolling windows before holdout
+training_window=recent1500 rolling windows before holdout
 lora_r=4
 lora_alpha=8
 max_steps=200
 balanced holdout cut-points: skip_windows=4000, 5000, 5500
-next missing evidence: recent-window length tradeoff
+next missing evidence: shorter-recency curve or regime-aware routing
 ```
 
 The `realized_vol_20` adapter family improved all 3 balanced rolling
@@ -200,5 +200,14 @@ cut5500 recent2000 MAE improvement: 2.011%
 cut5500 per-series MAE wins: 5/10
 ```
 
-The next controlled experiment should test `recent3000` to see whether a longer
-recent window keeps the cut5500 repair while recovering cut4000/cut5000 gains.
+Recent3000 did not improve the tradeoff:
+
+```text
+recent3000 rolling average MAE improvement: 1.507674%
+cut5500 recent3000 MAE improvement: 0.500%
+cut5500 per-series MAE wins: 4/10
+```
+
+The next controlled experiment should test `recent1500` to map the shorter
+recency curve. If that only helps `cut5500`, move to regime-aware adapter
+routing instead of forcing one fixed-window adapter.

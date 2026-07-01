@@ -10,6 +10,15 @@ returns are noisy and easy to overfit. Volatility and risk series are more
 stable, easier to evaluate, and more useful as inputs to downstream Moirai
 forecast/risk Modules.
 
+Current target direction:
+
+```text
+domain: financial market / macro risk
+data: FRED public daily market and macro series
+target: realized_vol_20
+meaning: 20-day realized volatility derived from daily log changes
+```
+
 ## Architecture
 
 ```mermaid
@@ -61,6 +70,7 @@ log_change LoRA: partial signal; MAE improved slightly, SMAPE regressed.
 realized_vol_20 LoRA: positive rolling signal, but cut5500 distribution shift blocks promotion.
 normalized realized_vol_20 LoRA: diagnostic useful, but failed to fix cut5500.
 recent2000 realized_vol_20 LoRA: improved cut5500, but average gain remains below promotion.
+recent3000 realized_vol_20 LoRA: negative result; improved cut4000 but weakened cut5500 repair.
 ```
 
 ## Data Contract
