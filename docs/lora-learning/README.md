@@ -55,3 +55,4 @@ Each note should answer four questions:
 - [042 - Regime-Full Router Breakthrough](./042-regime-full-router-breakthrough.md)
 - [043 - Router Manifest Freeze](./043-router-manifest-freeze.md)
 - [044 - Z-Score Second Target Archive](./044-zscore-second-target-archive.md)
+- [045 - Z-Score Recent2000 Candidate](./045-zscore-recent2000-candidate.md)

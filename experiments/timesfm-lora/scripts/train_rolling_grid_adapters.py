@@ -5,13 +5,27 @@ import subprocess
 import sys
 from pathlib import Path
 
-from rolling_grid import ALL_CUTS, FAMILIES, GRID_CHOICES, selected_cuts, selected_families, train_jobs
+from rolling_grid import (
+    ALL_CUTS,
+    DEFAULT_ADAPTER_PREFIX,
+    DEFAULT_FULL_BALANCED_ADAPTER,
+    FAMILIES,
+    GRID_CHOICES,
+    selected_cuts,
+    selected_families,
+    train_jobs,
+)
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("--csv", default="data/market/daily_market_series.csv")
+    parser.add_argument("--csv-template")
     parser.add_argument("--field", default="realized_vol_20")
+    parser.add_argument("--field-template")
+    parser.add_argument("--adapter-prefix", default=DEFAULT_ADAPTER_PREFIX)
+    parser.add_argument("--full-balanced-adapter", default=DEFAULT_FULL_BALANCED_ADAPTER)
+    parser.add_argument("--no-full-balanced-adapter", action="store_true")
     parser.add_argument("--model-id", default=".hf-cache/timesfm-2.5-200m-transformers")
     parser.add_argument("--context-len", type=int, default=128)
     parser.add_argument("--horizon-len", type=int, default=20)
@@ -35,22 +49,28 @@ def experiment_root() -> Path:
     return Path(__file__).resolve().parents[1]
 
 
-def command_for(args: argparse.Namespace, output_dir: str, max_windows: int, skip_windows: int) -> list[str]:
+def formatted(value: str, *, cut: int) -> str:
+    return value.format(cut=cut)
+
+
+def command_for(args: argparse.Namespace, job) -> list[str]:
+    csv_path = formatted(args.csv_template or args.csv, cut=job.cut)
+    field = formatted(args.field_template or args.field, cut=job.cut)
     return [
         sys.executable,
         "scripts/finetune_lora.py",
         "--csv",
-        args.csv,
+        csv_path,
         "--field",
-        args.field,
+        field,
         "--model-id",
         args.model_id,
         "--output-dir",
-        output_dir,
+        job.output_dir,
         "--max-windows",
-        str(max_windows),
+        str(job.max_windows),
         "--skip-windows",
-        str(skip_windows),
+        str(job.skip_windows),
         "--context-len",
         str(args.context_len),
         "--horizon-len",
@@ -79,7 +99,13 @@ def main() -> None:
     root = experiment_root()
     cuts = selected_cuts(grid=args.grid, selected=args.cut)
     families = selected_families(args.family)
-    jobs = train_jobs(cuts=cuts, families=families)
+    full_balanced_adapter = None if args.no_full_balanced_adapter else args.full_balanced_adapter
+    jobs = train_jobs(
+        cuts=cuts,
+        families=families,
+        adapter_prefix=args.adapter_prefix,
+        full_balanced_adapter=full_balanced_adapter,
+    )
     if not jobs:
         raise SystemExit("no train jobs selected")
 
@@ -90,7 +116,7 @@ def main() -> None:
             print(f"[train-grid] skip existing {index}/{len(jobs)} family={job.family} cut={job.cut}")
             continue
 
-        command = command_for(args, job.output_dir, job.max_windows, job.skip_windows)
+        command = command_for(args, job)
         print(
             "[train-grid] run "
             f"{index}/{len(jobs)} family={job.family} cut={job.cut} "

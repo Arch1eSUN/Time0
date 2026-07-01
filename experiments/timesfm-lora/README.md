@@ -100,6 +100,7 @@ loss-aware selector: opt-in regret-softmax beats ordinary softmax but underperfo
 calibrated KNN-regret: KNN-only with min_validation_lift 0.005 becomes the current best risk-balanced router checkpoint, but extra lift remains too small for promotion.
 regime-full router manifest: shared-positive two-horizon fallback-veto policy is frozen and manifest validation passes on late and expanded surfaces.
 zscore second target archive: full LoRA has small base-grid MAE value, but learned no-leak router does not beat fixed full fallback.
+zscore recent2000 candidate: expanded candidate pool increases oracle headroom and gives a small SMAPE-gated signal, but MAE routing still fails closed.
 ```
 
 ## Data Contract
