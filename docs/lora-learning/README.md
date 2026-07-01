@@ -52,3 +52,4 @@ Each note should answer four questions:
 - [039 - Later Archive Retest](./039-later-archive-retest.md)
 - [040 - Latest-Cut Downside Guard](./040-latest-cut-downside-guard.md)
 - [041 - Two-Horizon Temporal Guard](./041-two-horizon-temporal-guard.md)
+- [042 - Regime-Full Router Breakthrough](./042-regime-full-router-breakthrough.md)
