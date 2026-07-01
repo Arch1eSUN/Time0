@@ -20,6 +20,7 @@ class CandidateConfig:
     family: str | None = None
     k: int | None = None
     include_series: bool = False
+    regret_scale: str | None = None
 
 
 @dataclass(frozen=True)
@@ -46,6 +47,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--fallback-family", default="recent2000")
     parser.add_argument("--min-validation-lift", type=float, default=0.01)
     parser.add_argument("--softmax-steps", type=int, default=2000)
+    parser.add_argument("--candidate-set", choices=["baseline", "loss-aware"], default="baseline")
     return parser.parse_args()
 
 
@@ -234,6 +236,13 @@ def labels_for(rows: list[dict[str, Any]], families: list[str]) -> np.ndarray:
     return np.array([families.index(row["label"]["best_family_by_mae"]) for row in rows], dtype=int)
 
 
+def family_error_matrix(rows: list[dict[str, Any]], families: list[str], metric: MetricName) -> np.ndarray:
+    return np.array(
+        [[family_error(row, family, metric) for family in families] for row in rows],
+        dtype=float,
+    )
+
+
 def fit_softmax(
     train_rows: list[dict[str, Any]],
     *,
@@ -262,6 +271,66 @@ def fit_softmax(
         gradient = probabilities
         gradient[np.arange(labels.shape[0]), labels] -= 1.0
         gradient /= labels.shape[0]
+        weight_gradient = design.T @ gradient + l2 * weights
+        weight_gradient[-1] -= l2 * weights[-1]
+        weights -= learning_rate * weight_gradient
+
+    return frame, weights
+
+
+def regret_matrix(
+    rows: list[dict[str, Any]],
+    *,
+    families: list[str],
+    metric: MetricName,
+    regret_scale: str,
+) -> np.ndarray:
+    errors = family_error_matrix(rows, families, metric)
+    regrets = errors - errors.min(axis=1, keepdims=True)
+    if regret_scale == "raw":
+        return regrets
+    if regret_scale == "relative":
+        denominator = errors.mean(axis=1, keepdims=True)
+        denominator[denominator < 1e-9] = 1.0
+        return regrets / denominator
+    raise ValueError(f"unsupported regret scale: {regret_scale}")
+
+
+def fit_regret_softmax(
+    train_rows: list[dict[str, Any]],
+    *,
+    families: list[str],
+    include_series: bool,
+    metric: MetricName,
+    regret_scale: str,
+    steps: int,
+) -> tuple[FeatureFrame, np.ndarray]:
+    series_ids = sorted({str(row["series_id"]) for row in train_rows}) if include_series else []
+    frame = build_feature_frame(
+        train_rows,
+        families=families,
+        series_ids=series_ids,
+        include_series=include_series,
+    )
+    design = np.c_[frame.matrix, np.ones(frame.matrix.shape[0])]
+    regrets = regret_matrix(
+        train_rows,
+        families=families,
+        metric=metric,
+        regret_scale=regret_scale,
+    )
+    weights = np.zeros((design.shape[1], len(families)), dtype=float)
+    learning_rate = 0.2
+    l2 = 1e-3
+
+    for _step in range(steps):
+        logits = design @ weights
+        logits -= logits.max(axis=1, keepdims=True)
+        probabilities = np.exp(logits)
+        probabilities /= probabilities.sum(axis=1, keepdims=True)
+        expected_regret = (probabilities * regrets).sum(axis=1, keepdims=True)
+        gradient = probabilities * (regrets - expected_regret)
+        gradient /= regrets.shape[0]
         weight_gradient = design.T @ gradient + l2 * weights
         weight_gradient[-1] -= l2 * weights[-1]
         weights -= learning_rate * weight_gradient
@@ -343,6 +412,18 @@ def select_candidate(
             train_rows,
             families=families,
             include_series=config.include_series,
+            steps=softmax_steps,
+        )
+        return predict_softmax(model, eval_rows, families=families)
+    if config.kind == "regret_softmax":
+        if config.regret_scale is None:
+            raise ValueError(f"{config.name} is missing regret_scale")
+        model = fit_regret_softmax(
+            train_rows,
+            families=families,
+            include_series=config.include_series,
+            metric=metric,
+            regret_scale=config.regret_scale,
             steps=softmax_steps,
         )
         return predict_softmax(model, eval_rows, families=families)
@@ -613,11 +694,25 @@ def strip_private_rows(cut_reports: list[dict[str, Any]]) -> list[dict[str, Any]
     return public
 
 
-def learned_candidate_configs() -> list[CandidateConfig]:
+def learned_candidate_configs(candidate_set: str = "baseline") -> list[CandidateConfig]:
     configs = [
         CandidateConfig(name="softmax", kind="softmax", include_series=False),
         CandidateConfig(name="softmax_series", kind="softmax", include_series=True),
     ]
+    if candidate_set == "loss-aware":
+        for include_series in (False, True):
+            suffix = "series" if include_series else "no_series"
+            for regret_scale in ("raw", "relative"):
+                configs.append(
+                    CandidateConfig(
+                        name=f"regret_softmax_{regret_scale}_{suffix}",
+                        kind="regret_softmax",
+                        include_series=include_series,
+                        regret_scale=regret_scale,
+                    )
+                )
+    elif candidate_set != "baseline":
+        raise ValueError(f"unsupported candidate set: {candidate_set}")
     for include_series in (False, True):
         suffix = "series" if include_series else "no_series"
         for k in (25, 50, 100):
@@ -663,7 +758,7 @@ def build_report(args: argparse.Namespace) -> dict[str, Any]:
         raise ValueError(f"unknown fallback family: {args.fallback_family}")
 
     cut_rows = rows_by_cut(rows)
-    configs = learned_candidate_configs()
+    configs = learned_candidate_configs(args.candidate_set)
     chronological_diagnostics = {
         config.name: chronological_candidate_report(
             config=config,
@@ -702,6 +797,7 @@ def build_report(args: argparse.Namespace) -> dict[str, Any]:
         "selection_metric": args.metric,
         "cold_start_family": args.cold_start_family,
         "fallback_family": args.fallback_family,
+        "candidate_set": args.candidate_set,
         "min_validation_lift": args.min_validation_lift,
         "cuts": cuts,
         "families": families,

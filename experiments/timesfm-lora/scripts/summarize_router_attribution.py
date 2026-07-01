@@ -48,6 +48,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--min-series-validation-lift", type=float, default=0.0)
     parser.add_argument("--series-risk-decay", type=float, default=0.1)
     parser.add_argument("--softmax-steps", type=int, default=2000)
+    parser.add_argument("--candidate-set", choices=["baseline", "loss-aware"], default="baseline")
     return parser.parse_args()
 
 
@@ -626,7 +627,7 @@ def build_report(args: argparse.Namespace) -> dict[str, Any]:
         raise ValueError(f"unknown fallback family: {args.fallback_family}")
 
     cut_rows = rows_by_cut(rows)
-    learned_configs = learned_candidate_configs()
+    learned_configs = learned_candidate_configs(args.candidate_set)
     cut_reports: list[dict[str, Any]] = []
     records: list[dict[str, Any]] = []
 
@@ -687,6 +688,7 @@ def build_report(args: argparse.Namespace) -> dict[str, Any]:
         "policy": args.policy,
         "cold_start_family": args.cold_start_family,
         "fallback_family": args.fallback_family,
+        "candidate_set": args.candidate_set,
         "min_validation_lift": args.min_validation_lift,
         "min_series_validation_lift": args.min_series_validation_lift,
         "series_risk_decay": args.series_risk_decay,

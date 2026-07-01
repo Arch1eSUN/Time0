@@ -484,3 +484,27 @@ publishable policy frontier. The next useful research step is a supervised
 selector objective or richer loss-aware router training, not more manual
 threshold sweeps or additional raw context features.
 ```
+
+Loss-aware selector checkpoint:
+
+```text
+candidate set: loss-aware
+baseline candidate set validation-gated delta vs fallback: 0.0002674001
+loss-aware candidate set validation-gated delta vs fallback: 0.0002366568
+best diagnostic remains: knn_regret_no_series_k25
+best diagnostic delta vs fallback: 0.0004631997
+best regret-softmax: regret_softmax_raw_no_series
+best regret-softmax delta vs fallback: 0.0002065049
+loss-aware positive/negative routed series: 4/6
+```
+
+Conclusion:
+
+```text
+The regret objective is directionally useful because it beats ordinary softmax,
+but the linear regret-softmax selector does not improve the frontier. KNN-regret
+still captures local behavior better. Keep the loss-aware candidate set as an
+opt-in diagnostic, preserve baseline reproducibility, and move next to
+calibrated KNN-regret gating or a nonlinear/local selector with explicit
+per-series downside control.
+```

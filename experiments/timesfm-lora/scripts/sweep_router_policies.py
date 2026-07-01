@@ -25,6 +25,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--policy", action="append", choices=POLICIES)
     parser.add_argument("--cold-start-family", default="recent2000")
     parser.add_argument("--fallback-family", default="recent2000")
+    parser.add_argument("--candidate-set", choices=["baseline", "loss-aware"], default="baseline")
     parser.add_argument("--min-validation-lift", action="append", type=float)
     parser.add_argument("--min-series-validation-lift", action="append", type=float)
     parser.add_argument("--series-risk-decay", action="append", type=float)
@@ -71,6 +72,7 @@ def run_args(
         policy=policy,
         cold_start_family=args.cold_start_family,
         fallback_family=args.fallback_family,
+        candidate_set=args.candidate_set,
         min_validation_lift=min_validation_lift,
         min_series_validation_lift=min_series_validation_lift,
         series_risk_decay=series_risk_decay,
@@ -127,6 +129,7 @@ def main() -> None:
         "method": "router_policy_sweep",
         "input": str(experiment_path(args.input)),
         "metric": args.metric,
+        "candidate_set": args.candidate_set,
         "rows": len(rows),
         "best_by_delta": ranked[0],
         "top_rows": ranked[:10],

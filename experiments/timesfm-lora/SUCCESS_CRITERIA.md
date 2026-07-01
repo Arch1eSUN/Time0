@@ -111,6 +111,7 @@ Stop a training direction when any of these happens:
 | `no-leak regime features` | `realized_vol_20` | First positive MAE router milestone, not Promotion Ready | validation-gated routed MAE improves fixed recent2000 by 0.0002508807 on early grid, but SMAPE and series-aware guards still regress |
 | `feature ablation alignment-normalized` | `realized_vol_20` | Best router feature surface so far, not Promotion Ready | alignment-normalized improves fixed recent2000 on MAE, SMAPE, and series-guarded MAE, but series-aware lift is only 0.0000148190 |
 | `policy sweep alignment-normalized` | `realized_vol_20` | Useful stop signal, not Promotion Ready | best aggregate policy reaches 0.0002674001 MAE delta but only 4/10 positive series; best risk-balanced aggregate keeps 0.0002611555 delta with 7/10 positive series; series-risk tuning does not beat series_guarded |
+| `loss-aware selector` | `realized_vol_20` | Useful negative result, not Promotion Ready | regret-softmax beats ordinary softmax but underperforms KNN-regret; loss-aware gated delta falls to 0.0002366568 vs baseline 0.0002674001 and remains 4/10 positive series |
 
 Recommendation: stop increasing steps on `level`. Treat `realized_vol_20` as
 the first clean target signal, but do not promote it until distribution shift
@@ -204,5 +205,11 @@ row is still `validation_gated min_validation_lift=0.01`, while the best
 risk-balanced aggregate row is `validation_gated min_validation_lift=0.005`.
 Series-risk policies do not beat `series_guarded`, so further hard-gate tuning
 is low leverage. The next useful step is a supervised selector objective or
-richer loss-aware router training, not another threshold sweep.
+richer loss-aware router training, not another threshold sweep. A first
+loss-aware linear selector was tested next. It confirmed that regret objectives
+beat ordinary one-hot softmax, but linear regret-softmax still underperforms
+KNN-regret and reduces validation-gated delta vs the baseline candidate set.
+The next useful step is calibrated KNN-regret gating or a nonlinear/local
+selector with explicit per-series downside control, not more linear selector
+tuning.
 ```
