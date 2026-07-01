@@ -259,6 +259,23 @@ cuts aligned by window_id: 4000, 5000, 5500
 families per cut: zero-shot, full, recent1500, recent2000, recent3000
 ```
 
+Router-row checkpoint:
+
+```text
+router rows generated: 1500
+runtime feature no-leak check: passed
+best fixed family by mean MAE: recent2000
+leaky per-window oracle MAE improvement: 5.952245%
+```
+
+Conclusion:
+
+```text
+The current adapter family has enough per-window selection headroom to justify
+a no-leak router experiment, but not enough valid evidence for publication.
+The next step is chronological router training/evaluation, not r=8 or release.
+```
+
 Conclusion:
 
 ```text

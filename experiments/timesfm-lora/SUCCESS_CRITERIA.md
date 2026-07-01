@@ -100,6 +100,7 @@ Stop a training direction when any of these happens:
 | `history-best adapter router` | `realized_vol_20` | No-leak router failed | global routed cuts regress by 1.27%; per-series routed cuts regress by 0.07%; leaky oracle reaches 2.45% but is invalid |
 | `prediction archive instrumentation` | `realized_vol_20` | Data interface ready | zero-shot and LoRA smoke archives align by `window_id`; each record stores pre-forecast features, actuals, predictions, MAE, and SMAPE |
 | `full prediction archive export` | `realized_vol_20` | Router source data ready | 15 local archives, 7500 prediction records, and all 3 cuts align by `window_id` across 5 families |
+| `prediction archive joiner` | `realized_vol_20` | Router training data ready | 1500 no-leak checked rows; leaky per-window oracle reaches 5.95% MAE improvement but remains invalid for deployment |
 
 Recommendation: stop increasing steps on `level`. Treat `realized_vol_20` as
 the first clean target signal, but do not promote it until distribution shift
@@ -157,5 +158,7 @@ Prediction archive instrumentation is now available through
 `evaluate_timesfm.py --predictions-output`; the next step is full archive export
 and a joiner/router, not more fixed-window adapter training.
 Full prediction archive export is now complete: 15 archives and 7500 records
-are available locally. The next step is the joiner that creates router rows.
+are available locally. The joiner now creates 1500 no-leak checked router rows.
+The next step is a no-leak prediction-level router that trains on prior cuts
+and evaluates on future cuts.
 ```
