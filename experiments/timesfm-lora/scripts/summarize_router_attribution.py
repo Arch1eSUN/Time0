@@ -18,6 +18,7 @@ from evaluate_prediction_router import (
     select_candidate,
     validate_candidate_on_cut,
 )
+from router_fallback_veto import apply_neighbor_regret_veto, historical_veto_examples
 
 
 def parse_args() -> argparse.Namespace:
@@ -39,6 +40,7 @@ def parse_args() -> argparse.Namespace:
             "series_multicut_guarded",
             "series_multicut_worst_guarded",
             "series_risk_penalized",
+            "fallback_veto",
         ],
         default="validation_gated",
     )
@@ -47,6 +49,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--min-validation-lift", type=float, default=0.01)
     parser.add_argument("--min-series-validation-lift", type=float, default=0.0)
     parser.add_argument("--series-risk-decay", type=float, default=0.1)
+    parser.add_argument("--veto-k", type=int, default=50)
+    parser.add_argument("--veto-regret-threshold", type=float, default=0.0002)
+    parser.add_argument("--veto-feature-mode", choices=["global", "series"], default="global")
     parser.add_argument("--softmax-steps", type=int, default=2000)
     parser.add_argument(
         "--candidate-set",
@@ -324,6 +329,9 @@ def selection_for_cut(
     min_series_validation_lift: float,
     series_risk_decay: float,
     softmax_steps: int,
+    veto_k: int = 50,
+    veto_regret_threshold: float = 0.0002,
+    veto_feature_mode: str = "global",
 ) -> tuple[dict[str, Any], list[str]]:
     prior_cuts = [prior for prior in cuts if prior < cut]
     eval_rows = cut_rows[cut]
@@ -334,6 +342,7 @@ def selection_for_cut(
         "series_multicut_guarded",
         "series_multicut_worst_guarded",
         "series_risk_penalized",
+        "fallback_veto",
     }:
         raise ValueError(f"unsupported policy: {policy}")
 
@@ -396,6 +405,7 @@ def selection_for_cut(
     series_gate = None
     series_gate_source = None
     series_gate_validation_reports = None
+    fallback_veto_report = None
     if policy == "series_guarded" and should_route:
         validation_selected = select_candidate(
             selected_config,
@@ -442,6 +452,54 @@ def selection_for_cut(
             softmax_steps=softmax_steps,
         )
         series_gate_source = "recency_weighted_prior_validation_cuts"
+    elif policy == "fallback_veto" and should_route:
+        base_selections: dict[int, dict[str, Any]] = {}
+        for prior_cut in prior_cuts:
+            base_decision, base_selected = selection_for_cut(
+                cut=prior_cut,
+                cuts=cuts,
+                cut_rows=cut_rows,
+                families=families,
+                learned_configs=learned_configs,
+                metric=metric,
+                policy="validation_gated",
+                cold_start_family=cold_start_family,
+                fallback_family=fallback_family,
+                min_validation_lift=min_validation_lift,
+                min_series_validation_lift=0.0,
+                series_risk_decay=series_risk_decay,
+                softmax_steps=softmax_steps,
+                veto_k=veto_k,
+                veto_regret_threshold=veto_regret_threshold,
+                veto_feature_mode=veto_feature_mode,
+            )
+            base_selections[prior_cut] = {
+                "decision": base_decision,
+                "selected_families": base_selected,
+            }
+        examples = historical_veto_examples(
+            prior_cuts=prior_cuts,
+            cut_rows=cut_rows,
+            base_selections=base_selections,
+            fallback_family=fallback_family,
+            metric=metric,
+        )
+        selected, fallback_veto_report = apply_neighbor_regret_veto(
+            eval_rows=eval_rows,
+            selected_families=selected,
+            examples=examples,
+            families=families,
+            fallback_family=fallback_family,
+            include_series=veto_feature_mode == "series",
+            k=veto_k,
+            regret_threshold=veto_regret_threshold,
+        )
+        fallback_veto_report = {
+            **fallback_veto_report,
+            "feature_mode": veto_feature_mode,
+            "veto_k": veto_k,
+            "veto_regret_threshold": veto_regret_threshold,
+        }
 
     if series_gate is not None:
         selected = [
@@ -477,6 +535,8 @@ def selection_for_cut(
             decision["series_gate"]["series_risk_decay"] = series_risk_decay
         if series_gate_validation_reports is not None:
             decision["series_gate"]["validation_reports"] = series_gate_validation_reports
+    if fallback_veto_report is not None:
+        decision["fallback_veto"] = fallback_veto_report
     return decision, selected
 
 
@@ -601,6 +661,11 @@ def report_verdict(policy: str) -> str:
             "Recency-weighted series-risk gating balances recent failures "
             "against older evidence; promotion still requires broad stability."
         )
+    if policy == "fallback_veto":
+        return (
+            "Fallback-veto routing rejects historically risky overrides; promotion "
+            "still requires validation on a later archive or second target."
+        )
     if policy == "series_multicut_worst_guarded":
         return (
             "Worst-cut series gating blocks any series with a prior cut-level "
@@ -650,6 +715,9 @@ def build_report(args: argparse.Namespace) -> dict[str, Any]:
             min_series_validation_lift=args.min_series_validation_lift,
             series_risk_decay=args.series_risk_decay,
             softmax_steps=args.softmax_steps,
+            veto_k=args.veto_k,
+            veto_regret_threshold=args.veto_regret_threshold,
+            veto_feature_mode=args.veto_feature_mode,
         )
         cut_records = attribution_records(
             cut=cut,
@@ -696,6 +764,9 @@ def build_report(args: argparse.Namespace) -> dict[str, Any]:
         "min_validation_lift": args.min_validation_lift,
         "min_series_validation_lift": args.min_series_validation_lift,
         "series_risk_decay": args.series_risk_decay,
+        "veto_k": args.veto_k,
+        "veto_regret_threshold": args.veto_regret_threshold,
+        "veto_feature_mode": args.veto_feature_mode,
         "cuts": cuts,
         "families": families,
         "rows": len(records),

@@ -45,3 +45,4 @@ Each note should answer four questions:
 - [032 - Calibrated KNN-Regret Gating](./032-calibrated-knn-regret-gating.md)
 - [033 - Downside Budget Routing](./033-downside-budget-routing.md)
 - [034 - Fallback Veto Routing](./034-fallback-veto-routing.md)
+- [035 - Formal Router Policy](./035-formal-router-policy.md)

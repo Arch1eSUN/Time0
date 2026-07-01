@@ -14,6 +14,7 @@ POLICIES = (
     "series_multicut_guarded",
     "series_multicut_worst_guarded",
     "series_risk_penalized",
+    "fallback_veto",
 )
 
 
@@ -33,6 +34,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--min-validation-lift", action="append", type=float)
     parser.add_argument("--min-series-validation-lift", action="append", type=float)
     parser.add_argument("--series-risk-decay", action="append", type=float)
+    parser.add_argument("--veto-k", action="append", type=int)
+    parser.add_argument("--veto-regret-threshold", action="append", type=float)
+    parser.add_argument("--veto-feature-mode", action="append", choices=["global", "series"])
     parser.add_argument("--softmax-steps", type=int, default=2000)
     return parser.parse_args()
 
@@ -46,12 +50,31 @@ def sweep_args(args: argparse.Namespace) -> list[SimpleNamespace]:
     validation_lifts = values_or_default(args.min_validation_lift, (0.0, 0.005, 0.01, 0.02))
     series_lifts = values_or_default(args.min_series_validation_lift, (0.0, 0.001, 0.0025, 0.005))
     risk_decays = values_or_default(args.series_risk_decay, (0.05, 0.1, 0.25, 0.5, 0.75, 1.0))
+    veto_ks = args.veto_k or [50]
+    veto_thresholds = args.veto_regret_threshold or [0.0002]
+    veto_feature_modes = args.veto_feature_mode or ["global"]
 
     runs: list[SimpleNamespace] = []
     for policy in policies:
         for validation_lift in validation_lifts:
             if policy == "validation_gated":
                 runs.append(run_args(args, policy, validation_lift, 0.0, 0.1))
+            elif policy == "fallback_veto":
+                for veto_feature_mode in veto_feature_modes:
+                    for veto_k in veto_ks:
+                        for veto_threshold in veto_thresholds:
+                            runs.append(
+                                run_args(
+                                    args,
+                                    policy,
+                                    validation_lift,
+                                    0.0,
+                                    0.1,
+                                    veto_k=veto_k,
+                                    veto_regret_threshold=veto_threshold,
+                                    veto_feature_mode=veto_feature_mode,
+                                )
+                            )
             elif policy == "series_risk_penalized":
                 for series_lift in series_lifts:
                     for decay in risk_decays:
@@ -68,6 +91,10 @@ def run_args(
     min_validation_lift: float,
     min_series_validation_lift: float,
     series_risk_decay: float,
+    *,
+    veto_k: int = 50,
+    veto_regret_threshold: float = 0.0002,
+    veto_feature_mode: str = "global",
 ) -> SimpleNamespace:
     return SimpleNamespace(
         input=args.input,
@@ -80,6 +107,9 @@ def run_args(
         min_validation_lift=min_validation_lift,
         min_series_validation_lift=min_series_validation_lift,
         series_risk_decay=series_risk_decay,
+        veto_k=veto_k,
+        veto_regret_threshold=veto_regret_threshold,
+        veto_feature_mode=veto_feature_mode,
         softmax_steps=args.softmax_steps,
     )
 
@@ -98,6 +128,9 @@ def extract_row(report: dict[str, Any]) -> dict[str, Any]:
         "min_validation_lift": float(report["min_validation_lift"]),
         "min_series_validation_lift": float(report["min_series_validation_lift"]),
         "series_risk_decay": float(report["series_risk_decay"]),
+        "veto_k": int(report["veto_k"]),
+        "veto_regret_threshold": float(report["veto_regret_threshold"]),
+        "veto_feature_mode": str(report["veto_feature_mode"]),
         "routed_windows": int(routed["windows"]),
         "selected_metric": float(routed[metric_key]),
         "delta_vs_fallback": float(routed[delta_key]),
