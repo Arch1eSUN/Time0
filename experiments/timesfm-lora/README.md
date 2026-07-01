@@ -103,6 +103,7 @@ zscore second target archive: full LoRA has small base-grid MAE value, but learn
 zscore recent2000 candidate: expanded candidate pool increases oracle headroom and gives a small SMAPE-gated signal, but MAE routing still fails closed.
 zscore all-recent pool: five-family oracle headroom increases, but MAE routing still fails closed and SMAPE wins are fallback-sensitive.
 fallback sensitivity guard: zscore recent2000 SMAPE is partial-positive, while the wider all-recent pool is fallback-sensitive and remains blocked.
+finance readiness gate: continue research; fixed recent2000 averages 1.724% MAE lift, but release needs 2.000% and the best router still has 3 negative series.
 ```
 
 ## Data Contract

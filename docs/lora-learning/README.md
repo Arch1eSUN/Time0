@@ -58,3 +58,4 @@ Each note should answer four questions:
 - [045 - Z-Score Recent2000 Candidate](./045-zscore-recent2000-candidate.md)
 - [046 - Z-Score Candidate Pool Risk](./046-zscore-candidate-pool-risk.md)
 - [047 - Fallback Sensitivity Guard](./047-fallback-sensitivity-guard.md)
+- [048 - Finance Readiness Stop Gate](./048-finance-readiness-stop-gate.md)

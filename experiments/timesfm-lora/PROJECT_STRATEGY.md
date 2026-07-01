@@ -75,6 +75,33 @@ Project success requires all of:
 After these are met, the main project can stop. Future work becomes
 maintenance, not endless training.
 
+## Current Finance Readiness Gate
+
+Run the current release/stop gate with:
+
+```bash
+uv run python scripts/evaluate_finance_readiness.py
+```
+
+Current verdict as of 2026-07-02:
+
+```text
+continue_research
+```
+
+Reason:
+
+```text
+fixed recent2000 average MAE lift: 1.724% < 2.000% release gate
+best router extra lift vs fallback: 0.316%
+best router negative series: 3 > 0 release gate
+zscore all-recent branch: fallback-sensitive
+```
+
+Interpretation: the finance direction has real signal, but it has not reached a
+clean stopping point. Continue only with experiments that can move a failed gate:
+average lift, per-series downside, or fallback sensitivity.
+
 ## What Counts As Project Failure
 
 Stop the current research line if:
