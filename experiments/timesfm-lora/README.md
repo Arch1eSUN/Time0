@@ -60,6 +60,7 @@ level LoRA: failed candidate success; stop increasing steps for this target.
 log_change LoRA: partial signal; MAE improved slightly, SMAPE regressed.
 realized_vol_20 LoRA: positive rolling signal, but cut5500 distribution shift blocks promotion.
 normalized realized_vol_20 LoRA: diagnostic useful, but failed to fix cut5500.
+recent2000 realized_vol_20 LoRA: improved cut5500, but average gain remains below promotion.
 ```
 
 ## Data Contract

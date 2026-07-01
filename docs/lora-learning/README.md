@@ -24,3 +24,4 @@ Each note should answer four questions:
 - [011 - Per-Series Attribution: Where Did LoRA Help?](./011-per-series-attribution.md)
 - [012 - Distribution Shift: Why Cut5500 Is Weak](./012-distribution-shift-and-regime.md)
 - [013 - Normalized Target: Why Scale Fix Did Not Fix Cut5500](./013-normalized-target-lora.md)
+- [014 - Recent-Window Training: Why Newer Data Helped Cut5500](./014-recent-window-lora.md)

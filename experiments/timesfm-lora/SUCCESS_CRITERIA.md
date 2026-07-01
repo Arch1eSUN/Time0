@@ -94,6 +94,7 @@ Stop a training direction when any of these happens:
 | `market-macro-log-change-h20-r4-step200-balanced` | `log_change` | Partial signal, not success | MAE improves slightly, SMAPE regresses |
 | `market-macro-realized-vol-20-h20-r4-step200-*` | `realized_vol_20` | Rolling positive, not Promotion Ready | improves all 3 balanced cut-points, but average MAE gain is 1.52%; per-series average is negative for DEXUSEU and DGS10 |
 | `market-macro-realized-vol-20-zscore-h20-r4-step200-*` | `realized_vol_20_zscore_train*` | Diagnostic failed to promote | normalized average MAE gain is 0.98%; cut5500 regresses and only improves 3 of 10 series |
+| `market-macro-realized-vol-20-h20-r4-step200-recent2000-*` | `realized_vol_20` | Direction useful, not Promotion Ready | average MAE gain is 1.72%; cut5500 improves to 2.01%, but cut4000/cut5000 gains shrink |
 
 Recommendation: stop increasing steps on `level`. Treat `realized_vol_20` as
 the first clean target signal, but do not promote it until distribution shift
@@ -121,7 +122,7 @@ Next validation:
 
 ```text
 field=realized_vol_20
-training_window=recent-only rolling windows before each cut-point
+training_window=recent3000 rolling windows before each cut-point
 lora_r=4
 lora_alpha=8
 max_steps=200
@@ -136,6 +137,7 @@ Per-series evidence shows that cut5500 only improved 3 of 10 series.
 Distribution diagnostics show mixed regime shift at cut5500.
 Per-series z-score normalization did not fix cut5500 and lowered average MAE
 improvement to 0.98%.
-The next decision should test recency-limited fine-tuning before changing rank
-or publishing.
+Recent2000 fine-tuning improved cut5500 to 2.01% MAE gain and raised average
+MAE improvement to 1.72%, but still missed the 2% Promotion Ready threshold.
+The next decision should test recent3000 before changing rank or publishing.
 ```

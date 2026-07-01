@@ -165,16 +165,16 @@ Before publishing:
 
 ## Immediate Next Step
 
-Test recent-window fine-tuning before increasing LoRA capacity:
+Test a longer recent-window before increasing LoRA capacity:
 
 ```text
 field=realized_vol_20
-training_window=recent-only rolling windows before holdout
+training_window=recent3000 rolling windows before holdout
 lora_r=4
 lora_alpha=8
 max_steps=200
 balanced holdout cut-points: skip_windows=4000, 5000, 5500
-next missing evidence: recency robustness
+next missing evidence: recent-window length tradeoff
 ```
 
 The `realized_vol_20` adapter family improved all 3 balanced rolling
@@ -192,5 +192,13 @@ cut5500 normalized MAE improvement: -0.185%
 cut5500 per-series MAE wins: 3/10
 ```
 
-The next controlled experiment should test whether recent-window fine-tuning
-handles the cut5500 regime mismatch better than full-history fine-tuning.
+Recent2000 did improve the blocker, but not enough for promotion:
+
+```text
+recent2000 rolling average MAE improvement: 1.723918%
+cut5500 recent2000 MAE improvement: 2.011%
+cut5500 per-series MAE wins: 5/10
+```
+
+The next controlled experiment should test `recent3000` to see whether a longer
+recent window keeps the cut5500 repair while recovering cut4000/cut5000 gains.
