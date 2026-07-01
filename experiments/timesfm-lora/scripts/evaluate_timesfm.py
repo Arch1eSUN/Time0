@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -21,6 +22,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--skip-windows", type=int, default=0)
     parser.add_argument("--device", default="auto")
     parser.add_argument("--output", required=True)
+    parser.add_argument("--predictions-output")
     return parser.parse_args()
 
 
@@ -50,6 +52,27 @@ def metric_report(actual: list[float], predicted: list[float]) -> dict[str, floa
     return {
         "mae": mae(actual, predicted),
         "smape": smape(actual, predicted),
+    }
+
+
+def mean(values: tuple[float, ...]) -> float:
+    return sum(values) / len(values)
+
+
+def stddev(values: tuple[float, ...], current_mean: float) -> float:
+    variance = sum((value - current_mean) ** 2 for value in values) / len(values)
+    return math.sqrt(variance)
+
+
+def context_features(past: tuple[float, ...]) -> dict[str, float]:
+    current_mean = mean(past)
+    return {
+        "past_last": past[-1],
+        "past_mean": current_mean,
+        "past_std": stddev(past, current_mean),
+        "past_min": min(past),
+        "past_max": max(past),
+        "past_trend": past[-1] - past[0],
     }
 
 
@@ -86,6 +109,7 @@ def main() -> None:
 
     actual: list[float] = []
     predicted: list[float] = []
+    prediction_records: list[dict[str, object]] = []
     per_series: dict[str, SeriesAccumulator] = {}
     with torch.no_grad():
         for index, window in enumerate(windows, start=1):
@@ -96,12 +120,33 @@ def main() -> None:
                 return_dict=True,
             )
             forecast = output.mean_predictions[0, : args.horizon_len].detach().cpu().tolist()
+            forecast_values = [float(value) for value in forecast]
+            actual_values = list(window.future)
             actual.extend(window.future)
-            predicted.extend(float(value) for value in forecast)
+            predicted.extend(forecast_values)
             series_metrics = per_series.setdefault(window.series_id, SeriesAccumulator())
             series_metrics.windows += 1
             series_metrics.actual.extend(window.future)
-            series_metrics.predicted.extend(float(value) for value in forecast)
+            series_metrics.predicted.extend(forecast_values)
+            if args.predictions_output:
+                prediction_records.append(
+                    {
+                        "window_id": f"{window.series_id}:{window.start_index}",
+                        "window_index": index,
+                        "series_id": window.series_id,
+                        "start_index": window.start_index,
+                        "field": args.field,
+                        "model_id": args.model_id,
+                        "adapter_dir": args.adapter_dir,
+                        "context_len": args.context_len,
+                        "horizon_len": args.horizon_len,
+                        "skip_windows": args.skip_windows,
+                        "features": context_features(window.past),
+                        "actual": actual_values,
+                        "predicted": forecast_values,
+                        **metric_report(actual_values, forecast_values),
+                    }
+                )
             if index % 25 == 0:
                 print(f"[eval] windows={index}")
 
@@ -125,6 +170,23 @@ def main() -> None:
         **metric_report(actual, predicted),
         "per_series": per_series_report,
     }
+    if args.predictions_output:
+        predictions_output = Path(args.predictions_output)
+        predictions_output.parent.mkdir(parents=True, exist_ok=True)
+        predictions_archive = {
+            "field": args.field,
+            "model_id": args.model_id,
+            "adapter_dir": args.adapter_dir,
+            "context_len": args.context_len,
+            "horizon_len": args.horizon_len,
+            "windows": len(prediction_records),
+            "skip_windows": args.skip_windows,
+            "device": str(device),
+            "records": prediction_records,
+        }
+        predictions_output.write_text(json.dumps(predictions_archive, indent=2) + "\n")
+        report["predictions_output"] = str(predictions_output)
+        report["prediction_records"] = len(prediction_records)
     output = Path(args.output)
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(json.dumps(report, indent=2) + "\n")

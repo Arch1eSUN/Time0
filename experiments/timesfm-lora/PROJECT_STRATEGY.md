@@ -165,14 +165,14 @@ Before publishing:
 
 ## Immediate Next Step
 
-Add prediction-level routing evidence before increasing LoRA capacity:
+Export full prediction archives before increasing LoRA capacity:
 
 ```text
 field=realized_vol_20
-method=prediction-level router instrumentation
+method=full prediction archive export
 candidate_adapters=full-history,recent1500,recent2000,recent3000
 selection_data=pre-holdout validation windows
-next missing evidence: per-window prediction archive
+next missing evidence: joined router training rows
 ```
 
 The `realized_vol_20` adapter family improved all 3 balanced rolling
@@ -232,4 +232,20 @@ Conclusion:
 Historical aggregate metrics are not enough for routing. The leaky oracle shows
 adapter choice can matter, but the valid next step is per-window prediction
 instrumentation, not publication or r=8.
+```
+
+Prediction archive checkpoint:
+
+```text
+evaluate_timesfm.py --predictions-output implemented
+zero-shot smoke archive: 20 aligned windows
+recent2000 LoRA smoke archive: 20 aligned windows
+archive join key: window_id = series_id:start_index
+```
+
+Conclusion:
+
+```text
+The router data interface is ready. The next missing artifact is a full
+multi-adapter archive export plus a joiner that creates no-leak router rows.
 ```

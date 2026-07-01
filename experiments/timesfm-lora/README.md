@@ -78,6 +78,7 @@ recent2000 realized_vol_20 LoRA: improved cut5500, but average gain remains belo
 recent3000 realized_vol_20 LoRA: negative result; improved cut4000 but weakened cut5500 repair.
 recent1500 realized_vol_20 LoRA: fixed-window route failed; best window is split-dependent.
 historical adapter router: no-leak baseline failed; leaky oracle shows selection upside.
+prediction archive: evaluation interface now records per-window features, predictions, and actuals.
 ```
 
 ## Data Contract
@@ -150,6 +151,22 @@ uv run python scripts/evaluate_timesfm.py \
   --max-windows 500 \
   --skip-windows 5000 \
   --output reports/timesfm-lora-market-macro-level-h20-r4.json
+```
+
+Optional prediction archive for router work:
+
+```bash
+uv run python scripts/evaluate_timesfm.py \
+  --csv data/market/daily_market_series.csv \
+  --field realized_vol_20 \
+  --model-id .hf-cache/timesfm-2.5-200m-transformers \
+  --adapter-dir adapters/market-macro-realized-vol-20-h20-r4-step200-recent2000-train5500 \
+  --context-len 128 \
+  --horizon-len 20 \
+  --max-windows 500 \
+  --skip-windows 5500 \
+  --output reports/timesfm-lora-market-macro-realized-vol-20-h20-r4-step200-recent2000-train5500-holdout500-skip5500.json \
+  --predictions-output reports/predictions-timesfm-lora-market-macro-realized-vol-20-h20-r4-step200-recent2000-train5500-holdout500-skip5500.json
 ```
 
 ## Learning While Operating
