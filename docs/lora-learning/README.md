@@ -44,3 +44,4 @@ Each note should answer four questions:
 - [031 - Loss-Aware Selector](./031-loss-aware-selector.md)
 - [032 - Calibrated KNN-Regret Gating](./032-calibrated-knn-regret-gating.md)
 - [033 - Downside Budget Routing](./033-downside-budget-routing.md)
+- [034 - Fallback Veto Routing](./034-fallback-veto-routing.md)
