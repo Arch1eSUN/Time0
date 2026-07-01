@@ -47,7 +47,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--fallback-family", default="recent2000")
     parser.add_argument("--min-validation-lift", type=float, default=0.01)
     parser.add_argument("--softmax-steps", type=int, default=2000)
-    parser.add_argument("--candidate-set", choices=["baseline", "loss-aware"], default="baseline")
+    parser.add_argument(
+        "--candidate-set",
+        choices=["baseline", "loss-aware", "knn-regret"],
+        default="baseline",
+    )
     return parser.parse_args()
 
 
@@ -695,10 +699,14 @@ def strip_private_rows(cut_reports: list[dict[str, Any]]) -> list[dict[str, Any]
 
 
 def learned_candidate_configs(candidate_set: str = "baseline") -> list[CandidateConfig]:
-    configs = [
-        CandidateConfig(name="softmax", kind="softmax", include_series=False),
-        CandidateConfig(name="softmax_series", kind="softmax", include_series=True),
-    ]
+    configs: list[CandidateConfig] = []
+    if candidate_set in ("baseline", "loss-aware"):
+        configs.extend(
+            [
+                CandidateConfig(name="softmax", kind="softmax", include_series=False),
+                CandidateConfig(name="softmax_series", kind="softmax", include_series=True),
+            ]
+        )
     if candidate_set == "loss-aware":
         for include_series in (False, True):
             suffix = "series" if include_series else "no_series"
@@ -711,7 +719,7 @@ def learned_candidate_configs(candidate_set: str = "baseline") -> list[Candidate
                         regret_scale=regret_scale,
                     )
                 )
-    elif candidate_set != "baseline":
+    elif candidate_set not in ("baseline", "knn-regret"):
         raise ValueError(f"unsupported candidate set: {candidate_set}")
     for include_series in (False, True):
         suffix = "series" if include_series else "no_series"

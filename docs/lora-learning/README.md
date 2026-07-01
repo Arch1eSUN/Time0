@@ -42,3 +42,4 @@ Each note should answer four questions:
 - [029 - Feature Ablation](./029-feature-ablation.md)
 - [030 - Policy Sweep And Risk Tradeoff](./030-policy-sweep-risk-tradeoff.md)
 - [031 - Loss-Aware Selector](./031-loss-aware-selector.md)
+- [032 - Calibrated KNN-Regret Gating](./032-calibrated-knn-regret-gating.md)

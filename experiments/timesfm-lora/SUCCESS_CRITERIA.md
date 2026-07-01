@@ -112,6 +112,7 @@ Stop a training direction when any of these happens:
 | `feature ablation alignment-normalized` | `realized_vol_20` | Best router feature surface so far, not Promotion Ready | alignment-normalized improves fixed recent2000 on MAE, SMAPE, and series-guarded MAE, but series-aware lift is only 0.0000148190 |
 | `policy sweep alignment-normalized` | `realized_vol_20` | Useful stop signal, not Promotion Ready | best aggregate policy reaches 0.0002674001 MAE delta but only 4/10 positive series; best risk-balanced aggregate keeps 0.0002611555 delta with 7/10 positive series; series-risk tuning does not beat series_guarded |
 | `loss-aware selector` | `realized_vol_20` | Useful negative result, not Promotion Ready | regret-softmax beats ordinary softmax but underperforms KNN-regret; loss-aware gated delta falls to 0.0002366568 vs baseline 0.0002674001 and remains 4/10 positive series |
+| `calibrated KNN-regret` | `realized_vol_20` | Current best risk-balanced router checkpoint, not Promotion Ready | KNN-only mvl0 reaches 0.0002705342 MAE delta; KNN-only mvl0.005 keeps 0.0002687244 MAE delta, improves SMAPE by 0.0005225268, and reaches 7/10 positive series, but extra lift over baseline is only 0.0000013244 |
 
 Recommendation: stop increasing steps on `level`. Treat `realized_vol_20` as
 the first clean target signal, but do not promote it until distribution shift
@@ -211,5 +212,10 @@ beat ordinary one-hot softmax, but linear regret-softmax still underperforms
 KNN-regret and reduces validation-gated delta vs the baseline candidate set.
 The next useful step is calibrated KNN-regret gating or a nonlinear/local
 selector with explicit per-series downside control, not more linear selector
-tuning.
+tuning. Calibrated KNN-regret was tested next. The old 0.01 validation gate is
+too strict for KNN-regret and regresses, but lighter gates move the frontier:
+`min_validation_lift=0.0` gives the best aggregate MAE delta and
+`min_validation_lift=0.005` gives the best risk-balanced result with stronger
+SMAPE and 7/10 positive series. The next useful step is per-series downside
+control on top of KNN-regret.
 ```

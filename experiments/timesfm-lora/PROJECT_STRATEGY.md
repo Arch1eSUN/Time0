@@ -508,3 +508,26 @@ opt-in diagnostic, preserve baseline reproducibility, and move next to
 calibrated KNN-regret gating or a nonlinear/local selector with explicit
 per-series downside control.
 ```
+
+Calibrated KNN-regret checkpoint:
+
+```text
+candidate set: knn-regret
+old strict gate mvl0.01 MAE delta vs fallback: -0.0000393438
+best aggregate mvl0.0 MAE delta vs fallback: 0.0002705342
+best aggregate mvl0.0 SMAPE delta vs fallback: 0.0004127764
+best risk-balanced mvl0.005 MAE delta vs fallback: 0.0002687244
+best risk-balanced mvl0.005 SMAPE delta vs fallback: 0.0005225268
+best risk-balanced positive/negative routed series: 7/3
+extra MAE delta over baseline mvl0.01: 0.0000013244
+```
+
+Conclusion:
+
+```text
+KNN-regret needs lighter calibration than the mixed baseline candidate set. The
+0.005 gate is the current best risk-balanced checkpoint because it improves MAE,
+SMAPE, and series coverage together. The gain over baseline is still too small
+for promotion, so the next step is per-series downside control on top of the
+KNN-regret surface.
+```

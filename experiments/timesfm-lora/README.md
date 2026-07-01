@@ -97,6 +97,7 @@ no-leak regime features: first positive MAE validation-gated router on early gri
 feature ablation: best no-leak surface is alignment-normalized; MAE, SMAPE, and series-guarded MAE turn positive, but series lift remains too small for promotion.
 policy sweep: series-risk tuning does not beat series_guarded; validation_gated 0.005 is the best risk-balanced candidate, but still not promotion-ready.
 loss-aware selector: opt-in regret-softmax beats ordinary softmax but underperforms KNN-regret and lowers gated delta vs baseline; keep as diagnostic only.
+calibrated KNN-regret: KNN-only with min_validation_lift 0.005 becomes the current best risk-balanced router checkpoint, but extra lift remains too small for promotion.
 ```
 
 ## Data Contract
@@ -293,6 +294,16 @@ uv run python scripts/evaluate_prediction_router.py \
   --candidate-set loss-aware \
   --input reports/router-rows-early-regime-ablate-alignment-normalized-market-macro-realized-vol-20-h20-r4.json \
   --output reports/no-leak-prediction-router-early-regime-ablate-alignment-normalized-loss-aware-market-macro-realized-vol-20-h20-r4.json
+```
+
+Calibrated KNN-regret selector:
+
+```bash
+uv run python scripts/evaluate_prediction_router.py \
+  --candidate-set knn-regret \
+  --min-validation-lift 0.005 \
+  --input reports/router-rows-early-regime-ablate-alignment-normalized-market-macro-realized-vol-20-h20-r4.json \
+  --output reports/no-leak-prediction-router-early-regime-ablate-alignment-normalized-knn-regret-mvl005-market-macro-realized-vol-20-h20-r4.json
 ```
 
 Router attribution:

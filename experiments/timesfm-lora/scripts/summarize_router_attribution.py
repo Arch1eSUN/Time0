@@ -48,7 +48,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--min-series-validation-lift", type=float, default=0.0)
     parser.add_argument("--series-risk-decay", type=float, default=0.1)
     parser.add_argument("--softmax-steps", type=int, default=2000)
-    parser.add_argument("--candidate-set", choices=["baseline", "loss-aware"], default="baseline")
+    parser.add_argument(
+        "--candidate-set",
+        choices=["baseline", "loss-aware", "knn-regret"],
+        default="baseline",
+    )
     return parser.parse_args()
 
 

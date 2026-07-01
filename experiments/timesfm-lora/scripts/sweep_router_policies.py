@@ -25,7 +25,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--policy", action="append", choices=POLICIES)
     parser.add_argument("--cold-start-family", default="recent2000")
     parser.add_argument("--fallback-family", default="recent2000")
-    parser.add_argument("--candidate-set", choices=["baseline", "loss-aware"], default="baseline")
+    parser.add_argument(
+        "--candidate-set",
+        choices=["baseline", "loss-aware", "knn-regret"],
+        default="baseline",
+    )
     parser.add_argument("--min-validation-lift", action="append", type=float)
     parser.add_argument("--min-series-validation-lift", action="append", type=float)
     parser.add_argument("--series-risk-decay", action="append", type=float)
