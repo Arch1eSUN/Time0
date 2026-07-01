@@ -165,16 +165,14 @@ Before publishing:
 
 ## Immediate Next Step
 
-Test a shorter recent-window or regime-aware routing before increasing LoRA capacity:
+Test regime-aware routing before increasing LoRA capacity:
 
 ```text
 field=realized_vol_20
-training_window=recent1500 rolling windows before holdout
-lora_r=4
-lora_alpha=8
-max_steps=200
-balanced holdout cut-points: skip_windows=4000, 5000, 5500
-next missing evidence: shorter-recency curve or regime-aware routing
+method=regime-aware adapter routing
+candidate_adapters=full-history,recent1500,recent2000,recent3000
+selection_data=pre-holdout validation windows
+next missing evidence: no-leak router evaluation
 ```
 
 The `realized_vol_20` adapter family improved all 3 balanced rolling
@@ -208,6 +206,14 @@ cut5500 recent3000 MAE improvement: 0.500%
 cut5500 per-series MAE wins: 4/10
 ```
 
-The next controlled experiment should test `recent1500` to map the shorter
-recency curve. If that only helps `cut5500`, move to regime-aware adapter
-routing instead of forcing one fixed-window adapter.
+Recent1500 completed the fixed-window sweep:
+
+```text
+recent1500 rolling average MAE improvement: 0.068585%
+cut4000 best fixed window: recent1500
+cut5000 best fixed window: full-history
+cut5500 best fixed window: recent2000
+```
+
+The next controlled experiment should stop forcing one fixed-window adapter and
+test no-leak regime-aware adapter routing.

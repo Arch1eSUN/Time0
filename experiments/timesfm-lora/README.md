@@ -71,6 +71,7 @@ realized_vol_20 LoRA: positive rolling signal, but cut5500 distribution shift bl
 normalized realized_vol_20 LoRA: diagnostic useful, but failed to fix cut5500.
 recent2000 realized_vol_20 LoRA: improved cut5500, but average gain remains below promotion.
 recent3000 realized_vol_20 LoRA: negative result; improved cut4000 but weakened cut5500 repair.
+recent1500 realized_vol_20 LoRA: fixed-window route failed; best window is split-dependent.
 ```
 
 ## Data Contract
