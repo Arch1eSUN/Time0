@@ -46,3 +46,4 @@ Each note should answer four questions:
 - [033 - Downside Budget Routing](./033-downside-budget-routing.md)
 - [034 - Fallback Veto Routing](./034-fallback-veto-routing.md)
 - [035 - Formal Router Policy](./035-formal-router-policy.md)
+- [036 - Generalization Check](./036-generalization-check.md)
