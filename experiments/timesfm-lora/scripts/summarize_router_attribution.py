@@ -42,6 +42,7 @@ def parse_args() -> argparse.Namespace:
             "series_risk_penalized",
             "fallback_veto",
             "fallback_veto_series_guarded",
+            "fallback_veto_latest_cut_guarded",
         ],
         default="validation_gated",
     )
@@ -419,6 +420,48 @@ def recency_weighted_selection_risk_gate(
     return gate, validation_reports
 
 
+def latest_cut_selection_risk_gate(
+    *,
+    prior_cuts: list[int],
+    cut_rows: dict[int, list[dict[str, Any]]],
+    selected_by_cut: dict[int, list[str]],
+    fallback_family: str,
+    metric: MetricName,
+    min_series_validation_lift: float,
+) -> tuple[dict[str, dict[str, Any]], list[dict[str, Any]]]:
+    if not prior_cuts:
+        return {}, []
+
+    validation_cut = prior_cuts[-1]
+    validation_rows = cut_rows[validation_cut]
+    validation_selected = selected_by_cut[validation_cut]
+    gate = series_validation_gate(
+        validation_rows=validation_rows,
+        candidate_selected=validation_selected,
+        fallback_family=fallback_family,
+        metric=metric,
+        min_series_validation_lift=min_series_validation_lift,
+    )
+    return gate, [
+        {
+            "validation_cut": validation_cut,
+            "selected_counts": dict(sorted(Counter(validation_selected).items())),
+            "candidate_metric": metric_mean(validation_rows, validation_selected, metric),
+            "fallback_metric": metric_mean(
+                validation_rows,
+                fixed_selection(validation_rows, fallback_family),
+                metric,
+            ),
+            "allowed_series": [
+                series_id for series_id, item in gate.items() if item["allowed"]
+            ],
+            "blocked_series": [
+                series_id for series_id, item in gate.items() if not item["allowed"]
+            ],
+        }
+    ]
+
+
 def selection_for_cut(
     *,
     cut: int,
@@ -449,6 +492,7 @@ def selection_for_cut(
         "series_risk_penalized",
         "fallback_veto",
         "fallback_veto_series_guarded",
+        "fallback_veto_latest_cut_guarded",
     }:
         raise ValueError(f"unsupported policy: {policy}")
 
@@ -558,7 +602,11 @@ def selection_for_cut(
             softmax_steps=softmax_steps,
         )
         series_gate_source = "recency_weighted_prior_validation_cuts"
-    elif policy in {"fallback_veto", "fallback_veto_series_guarded"} and should_route:
+    elif policy in {
+        "fallback_veto",
+        "fallback_veto_series_guarded",
+        "fallback_veto_latest_cut_guarded",
+    } and should_route:
         base_selections: dict[int, dict[str, Any]] = {}
         for prior_cut in prior_cuts:
             base_decision, base_selected = selection_for_cut(
@@ -606,7 +654,7 @@ def selection_for_cut(
             "veto_k": veto_k,
             "veto_regret_threshold": veto_regret_threshold,
         }
-        if policy == "fallback_veto_series_guarded":
+        if policy in {"fallback_veto_series_guarded", "fallback_veto_latest_cut_guarded"}:
             guarded_selected_by_cut: dict[int, list[str]] = {}
             for prior_cut in prior_cuts:
                 _guarded_decision, guarded_selected = selection_for_cut(
@@ -628,16 +676,27 @@ def selection_for_cut(
                     veto_feature_mode=veto_feature_mode,
                 )
                 guarded_selected_by_cut[prior_cut] = guarded_selected
-            series_gate, series_gate_validation_reports = recency_weighted_selection_risk_gate(
-                prior_cuts=prior_cuts,
-                cut_rows=cut_rows,
-                selected_by_cut=guarded_selected_by_cut,
-                fallback_family=fallback_family,
-                metric=metric,
-                min_series_validation_lift=min_series_validation_lift,
-                series_risk_decay=series_risk_decay,
-            )
-            series_gate_source = "recency_weighted_prior_fallback_veto_cuts"
+            if policy == "fallback_veto_series_guarded":
+                series_gate, series_gate_validation_reports = recency_weighted_selection_risk_gate(
+                    prior_cuts=prior_cuts,
+                    cut_rows=cut_rows,
+                    selected_by_cut=guarded_selected_by_cut,
+                    fallback_family=fallback_family,
+                    metric=metric,
+                    min_series_validation_lift=min_series_validation_lift,
+                    series_risk_decay=series_risk_decay,
+                )
+                series_gate_source = "recency_weighted_prior_fallback_veto_cuts"
+            else:
+                series_gate, series_gate_validation_reports = latest_cut_selection_risk_gate(
+                    prior_cuts=prior_cuts,
+                    cut_rows=cut_rows,
+                    selected_by_cut=guarded_selected_by_cut,
+                    fallback_family=fallback_family,
+                    metric=metric,
+                    min_series_validation_lift=min_series_validation_lift,
+                )
+                series_gate_source = "latest_prior_fallback_veto_cut"
 
     if series_gate is not None:
         selected = [
@@ -808,6 +867,11 @@ def report_verdict(policy: str) -> str:
         return (
             "Guarded fallback-veto adds per-series historical downside control; "
             "promotion still requires aggregate lift and broad positive coverage."
+        )
+    if policy == "fallback_veto_latest_cut_guarded":
+        return (
+            "Latest-cut guarded fallback-veto reacts to the most recent "
+            "per-series downside; promotion still requires temporal stability."
         )
     if policy == "series_multicut_worst_guarded":
         return (
