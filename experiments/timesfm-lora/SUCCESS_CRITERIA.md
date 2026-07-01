@@ -103,6 +103,7 @@ Stop a training direction when any of these happens:
 | `prediction archive joiner` | `realized_vol_20` | Router training data ready | 1500 no-leak checked rows; leaky per-window oracle reaches 5.95% MAE improvement but remains invalid for deployment |
 | `prediction-level router` | `realized_vol_20` | Learned router not promotion-ready | best learned routed-cuts MAE gain is 1.20%, below fixed recent2000 at 1.51%; validation-gated policy correctly stays on fallback |
 | `expanded rolling prediction router` | `realized_vol_20` | Promising, not Promotion Ready | expanded grid has 4500 rows across 9 cuts; validation-gated routed MAE gain is 2.12% vs zero-shot, but extra lift over fixed recent2000 is only 0.000126 MAE |
+| `expanded router attribution` | `realized_vol_20` | Promotion still blocked | DFF contributes 148.70% of net router delta, while DGS10 and SP500 regress vs fallback; gain is concentrated rather than broad |
 
 Recommendation: stop increasing steps on `level`. Treat `realized_vol_20` as
 the first clean target signal, but do not promote it until distribution shift
@@ -166,5 +167,8 @@ the next step was an expanded rolling cut grid, not publication or larger LoRA
 rank. The expanded grid improved the validation-gated policy to 2.116398%
 routed-cut MAE gain vs zero-shot, but the extra lift over fixed `recent2000`
 is only 0.000126 MAE. Promotion remains blocked until per-series behavior and
-future-cut stability prove the router gain is not noise.
+future-cut stability prove the router gain is not noise. Per-series attribution
+shows the current lift is concentrated: `DFF` contributes more than the total
+net gain, while `DGS10` and `SP500` regress vs fallback. The next policy test
+should add a series-aware validation gate.
 ```

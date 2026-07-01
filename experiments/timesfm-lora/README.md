@@ -88,6 +88,7 @@ full archive export: 15 aligned archives and 7500 records are available locally 
 router rows: 1500 no-leak checked rows are available locally; leaky per-window oracle reaches 5.95% MAE headroom.
 prediction router: learned no-leak router did not beat fixed recent2000; validation-gated policy correctly stayed on fallback.
 expanded rolling grid: 4500 router rows across 9 cuts; validation-gated routing reaches 2.116398% routed MAE gain, but only adds 0.131419% relative lift over fixed recent2000 fallback.
+router attribution: validation-gated lift is concentrated; DFF contributes 148.703165% of net delta while DGS10 and SP500 regress vs fallback.
 ```
 
 ## Data Contract
@@ -213,6 +214,14 @@ uv run python scripts/join_prediction_archives.py \
 uv run python scripts/evaluate_prediction_router.py \
   --input reports/router-rows-expanded-market-macro-realized-vol-20-h20-r4.json \
   --output reports/no-leak-prediction-router-expanded-market-macro-realized-vol-20-h20-r4.json
+```
+
+Router attribution:
+
+```bash
+uv run python scripts/summarize_router_attribution.py \
+  --input reports/router-rows-expanded-market-macro-realized-vol-20-h20-r4.json \
+  --output reports/router-attribution-expanded-market-macro-realized-vol-20-h20-r4.json
 ```
 
 Selected dry run:

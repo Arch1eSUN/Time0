@@ -313,3 +313,22 @@ gain is still too small. The project should inspect per-series expanded router
 attribution before Moirai integration, Hugging Face publication, or larger LoRA
 rank.
 ```
+
+Expanded router-attribution checkpoint:
+
+```text
+routed windows: 4000
+validation-gated MAE delta over fixed recent2000: 0.0001260041
+positive routed series: 5
+negative routed series: 5
+largest positive contributor: DFF, 148.703165% of net delta
+largest negative contributors: DGS10 and SP500
+```
+
+Conclusion:
+
+```text
+The router has localized signal but not broad reliability. Publication remains
+blocked. The next experiment should test a series-aware validation gate that
+prevents learned routing on series with negative prior-validation behavior.
+```
