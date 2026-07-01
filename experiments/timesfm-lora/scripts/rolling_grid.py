@@ -7,10 +7,12 @@ from pathlib import Path
 BASE_CUTS = (4000, 5000, 5500)
 EXPANDED_EXTRA_CUTS = (3500, 3750, 4250, 4500, 4750, 5250)
 EXPANDED_CUTS = tuple(sorted(BASE_CUTS + EXPANDED_EXTRA_CUTS))
-ALL_CUTS = EXPANDED_CUTS
+EARLY_EXTRA_CUTS = (3000, 3250)
+EARLY_CUTS = tuple(sorted(EXPANDED_CUTS + EARLY_EXTRA_CUTS))
+ALL_CUTS = EARLY_CUTS
 
 FAMILIES = ("zero-shot", "full", "recent1500", "recent2000", "recent3000")
-GRID_CHOICES = ("base", "expanded")
+GRID_CHOICES = ("base", "expanded", "early")
 
 RECENT_WINDOWS = {
     "recent1500": 1500,
@@ -40,6 +42,8 @@ def cuts_for_grid(grid: str) -> tuple[int, ...]:
         return BASE_CUTS
     if grid == "expanded":
         return EXPANDED_CUTS
+    if grid == "early":
+        return EARLY_CUTS
     raise ValueError(f"unsupported grid: {grid}")
 
 

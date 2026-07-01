@@ -392,3 +392,24 @@ DGS10/SP500 at cut4250, tying the latest-cut guard. It does not create new net
 lift. Further hard-gate tuning is low leverage until the grid has more early
 chronological supervision or richer no-leak runtime features.
 ```
+
+Early rolling-grid checkpoint:
+
+```text
+early grid cuts: 3000,3250,3500,3750,4000,4250,4500,4750,5000,5250,5500
+joined router rows: 5500
+fixed recent2000 routed MAE: 0.0920232799
+best chronological diagnostic routed MAE: 0.0919644635
+validation-gated routed MAE: 0.0921934286
+series-risk routed MAE: 0.0921345873
+```
+
+Conclusion:
+
+```text
+The early grid adds useful coverage but is a negative deployability result.
+Leaky selection headroom remains large, and one chronological diagnostic barely
+beats fixed recent2000, but all fail-closed learned routing policies underperform
+the fallback. Further hard-gate or cut-density tuning is lower leverage than
+adding richer no-leak runtime features for regime detection.
+```

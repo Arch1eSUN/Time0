@@ -37,3 +37,4 @@ Each note should answer four questions:
 - [024 - Series-Aware Router Guard](./024-series-aware-router-guard.md)
 - [025 - Multi-Cut Validation And Over-Guarding](./025-multi-cut-validation-and-over-guarding.md)
 - [026 - Recency-Weighted Series Risk](./026-recency-weighted-series-risk.md)
+- [027 - Early Grid Negative Result](./027-early-grid-negative-result.md)

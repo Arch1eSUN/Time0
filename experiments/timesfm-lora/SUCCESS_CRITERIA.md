@@ -107,6 +107,7 @@ Stop a training direction when any of these happens:
 | `series-aware router guard` | `realized_vol_20` | Best router policy so far, not Promotion Ready | per-series guard improves routed MAE delta over fixed recent2000 to 0.0002025053, but still leaves negative series and uses only one prior validation cut |
 | `multi-cut series guard` | `realized_vol_20` | Useful negative result | aggregate multi-cut does not improve over validation-gated; worst-cut reaches 0.0001749690 MAE delta over fallback but underperforms latest-cut series guard |
 | `recency-weighted series risk` | `realized_vol_20` | Diagnostic tie, not Promotion Ready | decay 0.1 ties the latest-cut series guard at 0.0002025053 MAE delta over fallback; higher decay degrades as older evidence hides recent failures |
+| `early rolling grid` | `realized_vol_20` | Useful negative result | adding cuts 3000/3250 creates 5500 rows and 6.99% leaky oracle headroom, but validation-gated policies underperform fixed recent2000 |
 
 Recommendation: stop increasing steps on `level`. Treat `realized_vol_20` as
 the first clean target signal, but do not promote it until distribution shift
@@ -182,5 +183,8 @@ next: aggregate multi-cut diluted local failures, while worst-cut over-blocked
 DFF. The best policy remains latest-cut `series_guarded`; the next router policy
 should use a recency-weighted series-risk penalty. That penalty was tested and
 tied, but did not beat, latest-cut `series_guarded`. The next useful step is
-more early chronological supervision or richer no-leak runtime features.
+more early chronological supervision or richer no-leak runtime features. Early
+chronological supervision was tested next with cuts 3000/3250. It increased
+router rows to 5500 but fail-closed learned routing still underperformed fixed
+`recent2000`, so the next useful step is richer no-leak runtime features.
 ```
