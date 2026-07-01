@@ -97,6 +97,7 @@ Stop a training direction when any of these happens:
 | `market-macro-realized-vol-20-h20-r4-step200-recent2000-*` | `realized_vol_20` | Direction useful, not Promotion Ready | average MAE gain is 1.72%; cut5500 improves to 2.01%, but cut4000/cut5000 gains shrink |
 | `market-macro-realized-vol-20-h20-r4-step200-recent3000-*` | `realized_vol_20` | Negative window result | average MAE gain is 1.51%; cut4000 improves to 3.39%, but cut5500 drops to 0.50% |
 | `market-macro-realized-vol-20-h20-r4-step200-recent1500-*` | `realized_vol_20` | Fixed-window sweep stop | average MAE gain is 0.07%; cut4000 is best so far, but cut5000 and cut5500 regress vs zero-shot |
+| `history-best adapter router` | `realized_vol_20` | No-leak router failed | global routed cuts regress by 1.27%; per-series routed cuts regress by 0.07%; leaky oracle reaches 2.45% but is invalid |
 
 Recommendation: stop increasing steps on `level`. Treat `realized_vol_20` as
 the first clean target signal, but do not promote it until distribution shift
@@ -124,9 +125,10 @@ Next validation:
 
 ```text
 field=realized_vol_20
-method=regime-aware adapter routing
+method=prediction-level router instrumentation
 candidate_adapters=full-history,recent1500,recent2000,recent3000
 selection_data=pre-holdout validation windows
+new_artifact=per-window prediction archive
 ```
 
 Reason:
@@ -144,6 +146,9 @@ Recent3000 fine-tuning did not recover the tradeoff: average MAE improvement
 fell to 1.51% and cut5500 dropped to 0.50%.
 Recent1500 completed the fixed-window sweep: cut4000 became best so far, but
 cut5000 and cut5500 regressed vs zero-shot.
-The next decision should test regime-aware adapter routing before changing rank
-or publishing.
+The first no-leak historical routing baseline failed: aggregate historical
+performance did not select future adapters reliably. The leaky current-cut
+oracle reached 2.45% average MAE gain, which shows adapter selection has upside
+but cannot count as evidence. The next decision should add prediction-level
+archives and train/evaluate a valid router before changing rank or publishing.
 ```

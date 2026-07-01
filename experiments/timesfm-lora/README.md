@@ -28,10 +28,15 @@ flowchart LR
   C --> D["evaluate_naive.py"]
   C --> E["write_normalized_series_csv.py"]
   C --> F["finetune_lora.py"]
+  C --> L["evaluate_timesfm.py"]
   E --> F
   F --> G["LoRA adapter"]
+  G --> L
   D --> H["Baseline report"]
-  G --> I["Future Moirai ForecastRequest -> ForecastResult adapter"]
+  L --> M["Rolling eval reports"]
+  M --> J["evaluate_adapter_router.py"]
+  J --> K["Router report"]
+  G --> N["Future Moirai ForecastRequest -> ForecastResult adapter"]
 ```
 
 ## Epistemic Split
@@ -72,6 +77,7 @@ normalized realized_vol_20 LoRA: diagnostic useful, but failed to fix cut5500.
 recent2000 realized_vol_20 LoRA: improved cut5500, but average gain remains below promotion.
 recent3000 realized_vol_20 LoRA: negative result; improved cut4000 but weakened cut5500 repair.
 recent1500 realized_vol_20 LoRA: fixed-window route failed; best window is split-dependent.
+historical adapter router: no-leak baseline failed; leaky oracle shows selection upside.
 ```
 
 ## Data Contract

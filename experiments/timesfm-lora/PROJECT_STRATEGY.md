@@ -165,14 +165,14 @@ Before publishing:
 
 ## Immediate Next Step
 
-Test regime-aware routing before increasing LoRA capacity:
+Add prediction-level routing evidence before increasing LoRA capacity:
 
 ```text
 field=realized_vol_20
-method=regime-aware adapter routing
+method=prediction-level router instrumentation
 candidate_adapters=full-history,recent1500,recent2000,recent3000
 selection_data=pre-holdout validation windows
-next missing evidence: no-leak router evaluation
+next missing evidence: per-window prediction archive
 ```
 
 The `realized_vol_20` adapter family improved all 3 balanced rolling
@@ -217,3 +217,19 @@ cut5500 best fixed window: recent2000
 
 The next controlled experiment should stop forcing one fixed-window adapter and
 test no-leak regime-aware adapter routing.
+
+First routing checkpoint:
+
+```text
+global_history_best routed-cuts MAE improvement: -1.265%
+per_series_history_best routed-cuts MAE improvement: -0.069%
+leaky_current_cut_best_global average MAE improvement: 2.453%
+```
+
+Conclusion:
+
+```text
+Historical aggregate metrics are not enough for routing. The leaky oracle shows
+adapter choice can matter, but the valid next step is per-window prediction
+instrumentation, not publication or r=8.
+```

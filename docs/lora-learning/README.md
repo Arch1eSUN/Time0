@@ -27,3 +27,4 @@ Each note should answer four questions:
 - [014 - Recent-Window Training: Why Newer Data Helped Cut5500](./014-recent-window-lora.md)
 - [015 - Financial Domain: What Are We Actually Training?](./015-financial-domain-and-recent3000.md)
 - [016 - Fixed Window Failed: Why Routing Is Next](./016-fixed-window-failed-routing-next.md)
+- [017 - No-Leak Adapter Routing](./017-no-leak-adapter-routing.md)
