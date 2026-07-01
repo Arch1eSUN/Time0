@@ -47,3 +47,4 @@ Each note should answer four questions:
 - [034 - Fallback Veto Routing](./034-fallback-veto-routing.md)
 - [035 - Formal Router Policy](./035-formal-router-policy.md)
 - [036 - Generalization Check](./036-generalization-check.md)
+- [037 - Frozen Policy vs Sensitivity Sweep](./037-frozen-policy-vs-sensitivity-sweep.md)
