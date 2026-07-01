@@ -31,6 +31,7 @@ flowchart LR
   C --> L["evaluate_timesfm.py"]
   L --> O["export_prediction_archives.py"]
   O --> P["join_prediction_archives.py"]
+  P --> R["evaluate_prediction_router.py"]
   E --> F
   F --> G["LoRA adapter"]
   G --> L
@@ -39,6 +40,7 @@ flowchart LR
   M --> J["evaluate_adapter_router.py"]
   J --> K["Router report"]
   P --> Q["Router training rows"]
+  R --> S["No-leak router evaluation"]
   G --> N["Future Moirai ForecastRequest -> ForecastResult adapter"]
 ```
 
@@ -84,6 +86,7 @@ historical adapter router: no-leak baseline failed; leaky oracle shows selection
 prediction archive: evaluation interface now records per-window features, predictions, and actuals.
 full archive export: 15 aligned archives and 7500 records are available locally for joiner work.
 router rows: 1500 no-leak checked rows are available locally; leaky per-window oracle reaches 5.95% MAE headroom.
+prediction router: learned no-leak router did not beat fixed recent2000; validation-gated policy correctly stayed on fallback.
 ```
 
 ## Data Contract
@@ -185,6 +188,14 @@ Router row join:
 ```bash
 uv run python scripts/join_prediction_archives.py \
   --output reports/router-rows-market-macro-realized-vol-20-h20-r4.json
+```
+
+No-leak prediction router evaluation:
+
+```bash
+uv run python scripts/evaluate_prediction_router.py \
+  --input reports/router-rows-market-macro-realized-vol-20-h20-r4.json \
+  --output reports/no-leak-prediction-router-market-macro-realized-vol-20-h20-r4.json
 ```
 
 Selected dry run:

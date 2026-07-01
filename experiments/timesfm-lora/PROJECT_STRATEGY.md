@@ -276,6 +276,24 @@ a no-leak router experiment, but not enough valid evidence for publication.
 The next step is chronological router training/evaluation, not r=8 or release.
 ```
 
+Prediction-router checkpoint:
+
+```text
+best learned routed-cuts MAE improvement: 1.198444%
+fixed recent2000 routed-cuts MAE improvement: 1.507294%
+validation-gated routed-cuts MAE improvement: 1.507294%
+leaky per-window oracle routed-cuts MAE improvement: 4.719363%
+```
+
+Conclusion:
+
+```text
+The learned router has not beaten the fixed recent2000 fallback. The
+validation-gated policy correctly failed closed and preserved the fallback.
+Promotion remains blocked. The next useful experiment is more chronological
+router supervision through an expanded rolling cut grid.
+```
+
 Conclusion:
 
 ```text
