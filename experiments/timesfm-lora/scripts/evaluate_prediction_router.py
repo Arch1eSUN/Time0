@@ -97,7 +97,15 @@ def flatten_runtime_features(
     values: list[float] = []
     names: list[str] = []
 
-    for group_name in ("context", "prediction_disagreement"):
+    for group_name in (
+        "context",
+        "context_regime",
+        "prediction_disagreement",
+        "prediction_disagreement_normalized",
+        "prediction_context_alignment",
+    ):
+        if group_name not in runtime_features:
+            continue
         group = runtime_features[group_name]
         for key in sorted(group):
             names.append(f"{group_name}.{key}")

@@ -38,3 +38,4 @@ Each note should answer four questions:
 - [025 - Multi-Cut Validation And Over-Guarding](./025-multi-cut-validation-and-over-guarding.md)
 - [026 - Recency-Weighted Series Risk](./026-recency-weighted-series-risk.md)
 - [027 - Early Grid Negative Result](./027-early-grid-negative-result.md)
+- [028 - No-Leak Regime Features](./028-no-leak-regime-features.md)

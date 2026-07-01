@@ -108,6 +108,7 @@ Stop a training direction when any of these happens:
 | `multi-cut series guard` | `realized_vol_20` | Useful negative result | aggregate multi-cut does not improve over validation-gated; worst-cut reaches 0.0001749690 MAE delta over fallback but underperforms latest-cut series guard |
 | `recency-weighted series risk` | `realized_vol_20` | Diagnostic tie, not Promotion Ready | decay 0.1 ties the latest-cut series guard at 0.0002025053 MAE delta over fallback; higher decay degrades as older evidence hides recent failures |
 | `early rolling grid` | `realized_vol_20` | Useful negative result | adding cuts 3000/3250 creates 5500 rows and 6.99% leaky oracle headroom, but validation-gated policies underperform fixed recent2000 |
+| `no-leak regime features` | `realized_vol_20` | First positive MAE router milestone, not Promotion Ready | validation-gated routed MAE improves fixed recent2000 by 0.0002508807 on early grid, but SMAPE and series-aware guards still regress |
 
 Recommendation: stop increasing steps on `level`. Treat `realized_vol_20` as
 the first clean target signal, but do not promote it until distribution shift
@@ -186,5 +187,10 @@ tied, but did not beat, latest-cut `series_guarded`. The next useful step is
 more early chronological supervision or richer no-leak runtime features. Early
 chronological supervision was tested next with cuts 3000/3250. It increased
 router rows to 5500 but fail-closed learned routing still underperformed fixed
-`recent2000`, so the next useful step is richer no-leak runtime features.
+`recent2000`, so the next useful step is richer no-leak runtime features. Those
+features were added next through context-regime, normalized disagreement, and
+prediction-context alignment features. They produced the first positive default
+MAE validation-gated router on the early grid, but SMAPE and series-aware guards
+remain negative. The next useful step is feature ablation plus a risk policy that
+preserves MAE lift without series-level regressions.
 ```

@@ -19,6 +19,7 @@ from rolling_grid import (
 
 
 FORBIDDEN_RUNTIME_KEYS = {"actual", "mae", "smape", "best_family", "family_errors", "label"}
+EPSILON = 1e-9
 
 
 def parse_args() -> argparse.Namespace:
@@ -74,6 +75,10 @@ def population_std(values: list[float]) -> float:
     return (sum((value - center) ** 2 for value in values) / len(values)) ** 0.5
 
 
+def safe_ratio(numerator: float, denominator: float) -> float:
+    return numerator / (abs(denominator) + EPSILON)
+
+
 def summarize_prediction(values: list[float]) -> dict[str, float]:
     return {
         "predicted_first": values[0],
@@ -106,6 +111,80 @@ def prediction_disagreement(predictions_by_family: dict[str, list[float]]) -> di
         "horizon_prediction_spread_mean": mean(per_step_spreads),
         "horizon_prediction_spread_max": max(per_step_spreads),
     }
+
+
+def context_regime(context: dict[str, float]) -> dict[str, float]:
+    past_last = float(context["past_last"])
+    past_mean = float(context["past_mean"])
+    past_std = float(context["past_std"])
+    past_min = float(context["past_min"])
+    past_max = float(context["past_max"])
+    past_trend = float(context["past_trend"])
+    past_range = past_max - past_min
+    return {
+        "past_abs_last": abs(past_last),
+        "past_cv": safe_ratio(past_std, past_mean),
+        "past_last_minus_mean": past_last - past_mean,
+        "past_last_range_position": (past_last - past_min) / (past_range + EPSILON),
+        "past_last_zscore": safe_ratio(past_last - past_mean, past_std),
+        "past_range": past_range,
+        "past_range_over_mean": safe_ratio(past_range, past_mean),
+        "past_trend_over_std": safe_ratio(past_trend, past_std),
+    }
+
+
+def normalize_prediction_disagreement(
+    disagreement: dict[str, float], context: dict[str, float]
+) -> dict[str, float]:
+    past_mean = float(context["past_mean"])
+    past_std = float(context["past_std"])
+    normalized: dict[str, float] = {}
+    for key, value in disagreement.items():
+        normalized[f"{key}_over_context_mean"] = safe_ratio(float(value), past_mean)
+        normalized[f"{key}_over_context_std"] = safe_ratio(float(value), past_std)
+    return normalized
+
+
+def prediction_context_alignment(
+    *,
+    prediction_summaries: dict[str, dict[str, float]],
+    context: dict[str, float],
+    families: list[str],
+) -> dict[str, float]:
+    past_last = float(context["past_last"])
+    past_mean = float(context["past_mean"])
+    past_std = float(context["past_std"])
+    past_min = float(context["past_min"])
+    past_max = float(context["past_max"])
+    past_trend = float(context["past_trend"])
+    past_range = past_max - past_min
+    features: dict[str, float] = {}
+    for family in families:
+        summary = prediction_summaries[family]
+        predicted_range = float(summary["predicted_max"]) - float(summary["predicted_min"])
+        mean_delta_last = float(summary["predicted_mean"]) - past_last
+        last_delta_last = float(summary["predicted_last"]) - past_last
+        features[f"{family}_predicted_last_delta_from_past_last"] = last_delta_last
+        features[f"{family}_predicted_last_delta_from_past_last_over_std"] = safe_ratio(
+            last_delta_last, past_std
+        )
+        features[f"{family}_predicted_mean_delta_from_past_last"] = mean_delta_last
+        features[f"{family}_predicted_mean_delta_from_past_last_over_std"] = safe_ratio(
+            mean_delta_last, past_std
+        )
+        features[f"{family}_predicted_mean_delta_from_past_mean"] = (
+            float(summary["predicted_mean"]) - past_mean
+        )
+        features[f"{family}_predicted_range_over_past_range"] = predicted_range / (
+            past_range + EPSILON
+        )
+        features[f"{family}_predicted_std_over_past_std"] = safe_ratio(
+            float(summary["predicted_std"]), past_std
+        )
+        features[f"{family}_predicted_trend_minus_past_trend"] = (
+            float(summary["predicted_trend"]) - past_trend
+        )
+    return features
 
 
 def validate_no_leak(value: Any, *, path: str = "runtime_features") -> None:
@@ -142,6 +221,8 @@ def build_row(*, cut: int, families: list[str], records_by_family: dict[str, dic
     prediction_summaries = {
         family: summarize_prediction(predictions_by_family[family]) for family in families
     }
+    context = base_record["features"]
+    disagreement = prediction_disagreement(predictions_by_family)
     family_errors = {
         family: {
             "mae": float(records_by_family[family]["mae"]),
@@ -157,9 +238,18 @@ def build_row(*, cut: int, families: list[str], records_by_family: dict[str, dic
         "window_index": int(base_record["window_index"]),
         "series_id": base_record["series_id"],
         "start_index": int(base_record["start_index"]),
-        "context": base_record["features"],
+        "context": context,
+        "context_regime": context_regime(context),
         "prediction_summaries": prediction_summaries,
-        "prediction_disagreement": prediction_disagreement(predictions_by_family),
+        "prediction_disagreement": disagreement,
+        "prediction_disagreement_normalized": normalize_prediction_disagreement(
+            disagreement, context
+        ),
+        "prediction_context_alignment": prediction_context_alignment(
+            prediction_summaries=prediction_summaries,
+            context=context,
+            families=families,
+        ),
     }
     validate_no_leak(runtime_features)
 
@@ -271,14 +361,16 @@ def build_router_rows(*, cuts: list[int], families: list[str]) -> dict[str, Any]
 
     return {
         "method": "prediction_archive_router_rows",
+        "feature_set": "context_prediction_regime_v2",
         "field": expected_field,
         "horizon_len": expected_horizon,
         "cuts": cuts,
         "families": families,
         "rows": len(rows),
         "guardrail": (
-            "runtime_features contain only context features and prediction-derived summaries. "
-            "actuals, errors, and best-family labels are stored under label only."
+            "runtime_features contain only context, prediction-derived summaries, "
+            "and no-leak regime/alignment features. Actuals, errors, and "
+            "best-family labels are stored under label only."
         ),
         "summary": summarize_rows(rows, families),
         "archive_paths": archive_paths,

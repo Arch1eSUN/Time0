@@ -93,6 +93,7 @@ series-aware router guard: best tested guard uses 0.0% per-series lift, improves
 multi-cut series guard: aggregate multi-cut does not improve; worst-cut improves over validation-gated but over-blocks DFF, so best policy remains series_guarded 0.0%.
 recency-weighted series risk: decay 0.1 ties the best series_guarded result and confirms recent validation must dominate older cut evidence.
 early rolling grid: adds cuts 3000/3250 and 5500 rows, but fail-closed learned routing underperforms fixed recent2000; next step is richer no-leak runtime features.
+no-leak regime features: first positive MAE validation-gated router on early grid; SMAPE and series guards still block promotion.
 ```
 
 ## Data Contract
@@ -236,6 +237,18 @@ uv run python scripts/export_prediction_archives.py \
 uv run python scripts/join_prediction_archives.py \
   --grid early \
   --output reports/router-rows-early-market-macro-realized-vol-20-h20-r4.json
+```
+
+Early grid with regime features:
+
+```bash
+uv run python scripts/join_prediction_archives.py \
+  --grid early \
+  --output reports/router-rows-early-regime-market-macro-realized-vol-20-h20-r4.json
+
+uv run python scripts/evaluate_prediction_router.py \
+  --input reports/router-rows-early-regime-market-macro-realized-vol-20-h20-r4.json \
+  --output reports/no-leak-prediction-router-early-regime-market-macro-realized-vol-20-h20-r4.json
 ```
 
 Router attribution:

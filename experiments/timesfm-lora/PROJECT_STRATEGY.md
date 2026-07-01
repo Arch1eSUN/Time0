@@ -413,3 +413,27 @@ beats fixed recent2000, but all fail-closed learned routing policies underperfor
 the fallback. Further hard-gate or cut-density tuning is lower leverage than
 adding richer no-leak runtime features for regime detection.
 ```
+
+No-leak regime feature checkpoint:
+
+```text
+feature_set: context_prediction_regime_v2
+joined router rows: 5500
+fixed recent2000 routed MAE: 0.0920232799
+best chronological diagnostic routed MAE: 0.0916329967
+validation-gated routed MAE: 0.0917723992
+validation-gated delta vs fallback: 0.0002508807
+SMAPE validation-gated delta vs fallback: -0.0001982436
+series-guarded routed MAE delta vs fallback: -0.0000320558
+```
+
+Conclusion:
+
+```text
+Richer no-leak runtime features are the first router change to make default
+validation-gated MAE positive on the early grid. This confirms the feature seam
+is higher leverage than more cut density. Promotion is still blocked because
+SMAPE and series-aware guards remain negative, so the next step is feature
+ablation followed by a risk policy that preserves MAE lift without series-level
+regressions.
+```
