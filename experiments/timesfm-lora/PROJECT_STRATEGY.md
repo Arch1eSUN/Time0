@@ -114,6 +114,7 @@ fold-regression attribution: strict failures localize to specific folds/series/f
 alignment-risk feature surface: raw derived alignment-risk features remain strict-blocked and do not beat base in robust final diagnostics, so the next lever is smaller or more regularized alignment input
 alignment-compact feature surface: compact alignment features and strong L2 both remain strict-blocked; the next lever is an abstention/calibration target rather than more alignment columns
 false-positive logistic penalty: cost-sensitive logistic training produces no-series strict-positive candidates, but final holdout fails because exposure is tiny; the next lever is a minimum-exposure promotion gate
+minimum-exposure logistic gate: sparse strict positives are now blocked; robust no-series has enough exposure and slight final lift, but fold direction is inconsistent and final lift remains below fallback
 zscore all-recent branch: fallback-sensitive
 ```
 
@@ -275,6 +276,19 @@ the verdict is `not_promotable`. Include-series remains strict-blocked; robust
 mode selects a no-future-exposure policy. Keep false-positive weighting as a
 useful target lever, but add a minimum-exposure gate before treating strict
 validation as promotion evidence.
+
+Latest minimum-exposure gate diagnostic: adding
+`--min-validation-changed-windows` and
+`--min-validation-fold-changed-windows` makes exposure an explicit promotion
+condition. With `20` combined validation changes and `2` changes per validation
+fold required, the previous no-series strict positives disappear
+(`validation_strict_positive_count=0`). Robust no-series still finds an exposed
+candidate (`144` validation changes, fold exposure `76/33/35`, `52` final
+changes) and final metric improves slightly (`+0.0000070437`), but two
+validation folds regress and final relative lift remains below fixed recent2000
+fallback. Include-series remains strict-blocked and robust include-series has
+zero final exposure. Keep the exposure gate and move next to fold-consistent or
+worst-fold-aware utility, not broader feature expansion.
 
 ## What Counts As Project Failure
 

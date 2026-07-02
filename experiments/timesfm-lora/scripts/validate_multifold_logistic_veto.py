@@ -94,6 +94,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--false-positive-weight", type=float, action="append")
     parser.add_argument("--learning-rate", type=float, default=0.05)
     parser.add_argument("--steps", type=int, default=1200)
+    parser.add_argument("--min-validation-changed-windows", type=int, default=1)
+    parser.add_argument("--min-validation-fold-changed-windows", type=int, default=1)
     parser.add_argument("--max-validation-fold-no-exposure", type=int, default=0)
     parser.add_argument("--selection-gate", choices=["strict", "robust"], default="strict")
     parser.add_argument("--include-series", action="store_true")
@@ -426,6 +428,8 @@ def validation_score(
     metric: MetricName,
     include_series: bool,
     max_fold_no_exposure: int,
+    min_changed_windows: int,
+    min_fold_changed_windows: int,
 ) -> dict[str, Any]:
     combined_report = logistic_split_report(
         name="validation_combined",
@@ -463,15 +467,21 @@ def validation_score(
 
     fold_negative_regressions = sum(negative_delta(report) > 0 for report in fold_reports)
     fold_metric_regressions = sum(metric_delta(report) <= 0.0 for report in fold_reports)
+    fold_changed_windows = [changed_windows(report) for report in fold_reports]
     fold_no_exposure = sum(changed_windows(report) == 0 for report in fold_reports)
+    fold_under_min_exposure = sum(changed < min_fold_changed_windows for changed in fold_changed_windows)
     combined_negative_delta = negative_delta(combined_report)
     combined_metric_delta = metric_delta(combined_report)
+    combined_changed_windows = changed_windows(combined_report)
+    exposure_pass = (
+        combined_changed_windows >= min_changed_windows
+        and fold_under_min_exposure <= max_fold_no_exposure
+    )
     robust_pass = (
-        changed_windows(combined_report) > 0
+        exposure_pass
         and combined_metric_delta > 0.0
         and combined_negative_delta <= 0
         and fold_negative_regressions == 0
-        and fold_no_exposure <= max_fold_no_exposure
     )
 
     return {
@@ -481,10 +491,16 @@ def validation_score(
         "summary": {
             "combined_metric_delta": combined_metric_delta,
             "combined_negative_series_delta": combined_negative_delta,
+            "combined_changed_windows": combined_changed_windows,
+            "fold_changed_windows": fold_changed_windows,
             "fold_negative_regressions": fold_negative_regressions,
             "fold_metric_regressions": fold_metric_regressions,
             "fold_no_exposure": fold_no_exposure,
+            "fold_under_min_exposure": fold_under_min_exposure,
             "max_fold_no_exposure": max_fold_no_exposure,
+            "min_validation_changed_windows": min_changed_windows,
+            "min_validation_fold_changed_windows": min_fold_changed_windows,
+            "exposure_pass": exposure_pass,
             "robust_pass": robust_pass,
         },
     }
@@ -495,6 +511,7 @@ def validation_positive(score: dict[str, Any]) -> bool:
         float(score["summary"]["combined_metric_delta"]) > 0.0
         and int(score["summary"]["combined_negative_series_delta"]) <= 0
         and int(score["summary"]["fold_negative_regressions"]) == 0
+        and bool(score["summary"].get("exposure_pass", True))
     )
 
 
@@ -517,6 +534,8 @@ def ranked_validation_scores(scores: list[dict[str, Any]]) -> list[dict[str, Any
             -int(score["summary"]["combined_negative_series_delta"]),
             float(score["summary"]["combined_metric_delta"]),
             -int(score["summary"]["fold_metric_regressions"]),
+            bool(score["summary"].get("exposure_pass", True)),
+            -int(score["summary"].get("fold_under_min_exposure", 0)),
             -int(score["summary"]["fold_no_exposure"]),
             changed_windows(score["combined"]),
         ),
@@ -658,6 +677,8 @@ def build_report(args: argparse.Namespace) -> dict[str, Any]:
             metric=args.metric,
             include_series=args.include_series,
             max_fold_no_exposure=args.max_validation_fold_no_exposure,
+            min_changed_windows=args.min_validation_changed_windows,
+            min_fold_changed_windows=args.min_validation_fold_changed_windows,
         )
         for config in configs
     ]
@@ -699,6 +720,8 @@ def build_report(args: argparse.Namespace) -> dict[str, Any]:
         "learning_rate": args.learning_rate,
         "steps": args.steps,
         "training_target": "fallback_better_probability_with_false_positive_penalty",
+        "min_validation_changed_windows": args.min_validation_changed_windows,
+        "min_validation_fold_changed_windows": args.min_validation_fold_changed_windows,
         "max_validation_fold_no_exposure": args.max_validation_fold_no_exposure,
         "cuts": cuts,
         "routed_rows": len(routed_rows),
@@ -721,7 +744,8 @@ def build_report(args: argparse.Namespace) -> dict[str, Any]:
             "Logistic fallback-veto probabilities are trained on discovery override "
             "examples with optional extra weight on harmful-veto labels, selected "
             "on chronological validation folds, and strict mode fails closed before "
-            "final holdout when no candidate avoids fold metric/downside regressions."
+            "final holdout when no candidate avoids fold metric/downside regressions "
+            "or the minimum validation exposure gate."
         ),
     }
 

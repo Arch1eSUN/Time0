@@ -79,3 +79,4 @@ Each note should answer four questions:
 - [066 - Alignment-Risk Features](./066-alignment-risk-features.md)
 - [067 - Compact Features And Regularization](./067-compact-features-and-regularization.md)
 - [068 - False-Positive Penalty](./068-false-positive-penalty.md)
+- [069 - Minimum Exposure Gate](./069-minimum-exposure-gate.md)
