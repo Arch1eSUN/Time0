@@ -106,6 +106,7 @@ two-feature veto: deeper hand-written AND policy improves incrementally, but is 
 score-vote veto: wider hand-written vote policy improves final holdout, but validation has 0 robust-pass and 0 positive candidates
 supervised KNN-regret veto: learned no-series router passes loose validation but fails final; series-aware sensitivity is final-positive but validation-negative
 strict supervised gate: fail-closed selection rejects all current supervised KNN-regret candidates before final holdout
+logistic fallback probability: calibrated classifier finds loose validation-positive candidates, but strict fold-level gate rejects all configs
 zscore all-recent branch: fallback-sensitive
 ```
 
@@ -178,6 +179,16 @@ surfaces return `strict_gate_no_candidate`, `selected_config=null`, and
 `final_holdout_evaluated=false`. Keep this fail-closed gate for supervised
 router promotion; the next model step should improve candidate quality under
 the strict gate instead of relaxing validation.
+
+Latest logistic-router diagnostic: a numpy logistic fallback-veto classifier
+improves the decision interface by estimating `P(fallback_better)` instead of
+using neighbor mean regret. It finds aggregate-positive validation candidates
+on both no-series and series-aware surfaces, but every candidate still has
+fold-level metric regressions (`validation_strict_positive_count=0`). Strict
+mode correctly returns `strict_gate_no_candidate` and does not evaluate final
+holdout. The next step should improve supervision quality, likely expected
+regret or downside-aware utility labels, rather than only swapping classifier
+mechanics.
 
 ## What Counts As Project Failure
 

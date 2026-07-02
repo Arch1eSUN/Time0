@@ -71,3 +71,4 @@ Each note should answer four questions:
 - [058 - Score-Based Router](./058-score-based-router.md)
 - [059 - Supervised Router Transfer](./059-supervised-router-transfer.md)
 - [060 - Fail-Closed Validation Gate](./060-fail-closed-validation-gate.md)
+- [061 - Calibrated Fallback Probability](./061-calibrated-fallback-probability.md)
