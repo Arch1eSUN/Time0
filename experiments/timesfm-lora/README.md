@@ -132,6 +132,7 @@ final-exposure logistic gate: requiring at least 20 changed final windows downgr
 margin-weighted logistic training: weighting discovery examples by bounded regret magnitude suppresses sparse positives, but selected robust candidates collapse to zero final exposure; stop scalar sample-weight tweaks and separate fallback-benefit prediction from abstention.
 positive-quantile abstention gate: separating fallback-benefit prediction from train-calibrated confidence gating gives a no-series partial-positive final diagnostic with 81 changed windows and positive final delta, but strict validation remains blocked by two fold metric regressions.
 fold-utility selection: choosing candidates by fewer fold regressions reduces no-series validation regressions from 2 to 1, but final exposure falls to 16 and final delta turns negative; selection-only repair cannot solve the current router tradeoff.
+compact-alignment logistic surface: exposing compact prediction/context alignment features reduces robust-pass candidates and turns the no-series final delta negative, so the base no-series positive-quantile surface remains the stronger checkpoint.
 ```
 
 ## Data Contract

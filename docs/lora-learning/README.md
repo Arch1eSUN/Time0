@@ -87,3 +87,4 @@ Each note should answer four questions:
 - [074 - Margin-Weighted Training](./074-margin-weighted-training.md)
 - [075 - Positive-Quantile Abstention](./075-positive-quantile-abstention.md)
 - [076 - Fold-Utility Selection](./076-fold-utility-selection.md)
+- [077 - Compact Alignment Logistic Surface](./077-compact-alignment-logistic-surface.md)

@@ -122,6 +122,7 @@ final-exposure logistic gate: final holdout promotion now requires at least 20 c
 margin-weighted logistic training: time-bin plus regret-magnitude sample weights reduce validation positives but collapse final holdout exposure to zero, so scalar weighting is no longer the main lever
 positive-quantile abstention gate: a two-stage no-series router gives 81 final changed windows and positive final delta, but still fails strict validation and remains below fallback, so continue with fold-regression repair rather than release
 fold-utility selection: selection-only fold repair reduces validation fold regressions but underexposes and hurts final holdout, so the next lever must change training target or features for weak folds
+compact-alignment logistic surface: no-leak alignment features worsen final transfer under the current logistic target, so keep the base no-series positive-quantile checkpoint and change target formulation next
 zscore all-recent branch: fallback-sensitive
 ```
 

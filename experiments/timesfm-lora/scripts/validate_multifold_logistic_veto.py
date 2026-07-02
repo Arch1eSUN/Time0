@@ -26,7 +26,13 @@ from evaluate_router_fallback_veto import (
     experiment_path,
     series_delta_summary,
 )
-from router_fallback_veto import VetoExample, build_veto_matrix
+from router_fallback_veto import (
+    ALIGNMENT_COMPACT_FEATURE_SURFACE,
+    ALIGNMENT_RISK_FEATURE_SURFACE,
+    FEATURE_SURFACE_BASE,
+    VetoExample,
+    build_veto_matrix,
+)
 from validate_feature_veto_rule import relative_lift
 from validate_multifold_feature_veto import changed_windows, default_validation_cuts, metric_delta, subset_by_predicate
 from validate_multifold_supervised_veto import supervised_examples
@@ -43,6 +49,7 @@ class LogisticVetoConfig:
     false_positive_weight: float
     training_weighting: str
     training_time_bins: int
+    feature_surface: str
     abstention_mode: str
     positive_probability_quantile: float
     learning_rate: float
@@ -110,6 +117,11 @@ def parse_args() -> argparse.Namespace:
         action="append",
     )
     parser.add_argument("--training-time-bins", type=int, default=3)
+    parser.add_argument(
+        "--feature-surface",
+        choices=[FEATURE_SURFACE_BASE, ALIGNMENT_COMPACT_FEATURE_SURFACE, ALIGNMENT_RISK_FEATURE_SURFACE],
+        action="append",
+    )
     parser.add_argument("--abstention-mode", choices=["none", "positive-quantile"], action="append")
     parser.add_argument("--positive-probability-quantile", type=float, action="append")
     parser.add_argument("--learning-rate", type=float, default=0.05)
@@ -195,6 +207,15 @@ def default_positive_probability_quantiles(requested: list[float] | None) -> lis
     return values
 
 
+def default_feature_surfaces(requested: list[str] | None) -> list[str]:
+    raw_values = requested or [FEATURE_SURFACE_BASE]
+    values: list[str] = []
+    for value in raw_values:
+        if value not in values:
+            values.append(value)
+    return values
+
+
 def example_margin_summary(examples: list[VetoExample]) -> dict[str, Any]:
     if not examples:
         return {
@@ -222,6 +243,7 @@ def config_summary(config: LogisticVetoConfig) -> dict[str, Any]:
         "false_positive_weight": config.false_positive_weight,
         "training_weighting": config.training_weighting,
         "training_time_bins": config.training_time_bins,
+        "feature_surface": config.feature_surface,
         "abstention_mode": config.abstention_mode,
         "positive_probability_quantile": config.positive_probability_quantile,
         "learning_rate": config.learning_rate,
@@ -236,6 +258,7 @@ def config_from_summary(payload: dict[str, Any]) -> LogisticVetoConfig:
         false_positive_weight=float(payload.get("false_positive_weight", 1.0)),
         training_weighting=str(payload.get("training_weighting", "global-label-balanced")),
         training_time_bins=int(payload.get("training_time_bins", 3)),
+        feature_surface=str(payload.get("feature_surface", FEATURE_SURFACE_BASE)),
         abstention_mode=str(payload.get("abstention_mode", "none")),
         positive_probability_quantile=float(payload.get("positive_probability_quantile", 0.75)),
         learning_rate=float(payload["learning_rate"]),
@@ -467,6 +490,7 @@ def train_logistic_model(
     *,
     examples: list[VetoExample],
     families: list[str],
+    fallback_family: str,
     include_series: bool,
     config: LogisticVetoConfig,
 ) -> LogisticVetoModel:
@@ -481,6 +505,8 @@ def train_logistic_model(
         selected_families=train_families,
         families=families,
         include_series=include_series,
+        feature_surface=config.feature_surface,
+        fallback_family=fallback_family,
     )
     mean = np.nanmean(matrix, axis=0)
     scale = np.nanstd(matrix, axis=0)
@@ -562,6 +588,8 @@ def apply_logistic_veto(
         families=families,
         include_series=include_series,
         reference=model.frame,
+        feature_surface=model.config.feature_surface,
+        fallback_family=fallback_family,
     )
     features = normalized_matrix(matrix, model.mean, model.scale)
     probabilities = sigmoid(features @ model.weights + model.bias)
@@ -649,6 +677,7 @@ def logistic_split_report(
     model = train_logistic_model(
         examples=training_examples,
         families=families,
+        fallback_family=fallback_family,
         include_series=include_series,
         config=config,
     )
@@ -1009,6 +1038,7 @@ def build_report(args: argparse.Namespace) -> dict[str, Any]:
             false_positive_weight=false_positive_weight,
             training_weighting=training_weighting,
             training_time_bins=args.training_time_bins,
+            feature_surface=feature_surface,
             abstention_mode=abstention_mode,
             positive_probability_quantile=positive_probability_quantile,
             learning_rate=args.learning_rate,
@@ -1018,6 +1048,7 @@ def build_report(args: argparse.Namespace) -> dict[str, Any]:
         for threshold in default_threshold_values(args.probability_threshold)
         for false_positive_weight in default_false_positive_weights(args.false_positive_weight)
         for training_weighting in default_training_weightings(args.training_weighting)
+        for feature_surface in default_feature_surfaces(args.feature_surface)
         for abstention_mode in default_abstention_modes(args.abstention_mode)
         for positive_probability_quantile in default_positive_probability_quantiles(
             args.positive_probability_quantile
@@ -1087,6 +1118,7 @@ def build_report(args: argparse.Namespace) -> dict[str, Any]:
         "false_positive_weights": default_false_positive_weights(args.false_positive_weight),
         "training_weightings": default_training_weightings(args.training_weighting),
         "training_time_bins": args.training_time_bins,
+        "feature_surfaces": default_feature_surfaces(args.feature_surface),
         "abstention_modes": default_abstention_modes(args.abstention_mode),
         "positive_probability_quantiles": default_positive_probability_quantiles(
             args.positive_probability_quantile
@@ -1095,7 +1127,7 @@ def build_report(args: argparse.Namespace) -> dict[str, Any]:
         "steps": args.steps,
         "training_target": (
             "fallback_better_probability_with_false_positive_penalty_optional_temporal_balance_"
-            "and_optional_training_positive_quantile_abstention"
+            "optional_feature_surface_and_optional_training_positive_quantile_abstention"
         ),
         "min_validation_changed_windows": args.min_validation_changed_windows,
         "min_validation_fold_changed_windows": args.min_validation_fold_changed_windows,
@@ -1131,14 +1163,14 @@ def build_report(args: argparse.Namespace) -> dict[str, Any]:
         "guardrail": (
             "Logistic fallback-veto probabilities are trained on discovery override "
             "examples with optional extra weight on harmful-veto labels and optional "
-            "cut- or time-bin-balanced discovery sample weights. Optional abstention "
-            "gates are calibrated from training-split positive probabilities only. "
-            "Candidates are selected on chronological validation folds, and strict "
-            "mode fails closed before final holdout when no candidate avoids fold "
-            "metric/downside regressions or the minimum validation exposure gate. "
-            "Final holdout promotion also requires the configured minimum final "
-            "exposure. Robust diagnostics can rank by combined lift, worst-fold "
-            "validation utility, or fold-utility scoring."
+            "cut- or time-bin-balanced discovery sample weights and optional no-leak "
+            "runtime feature surfaces. Optional abstention gates are calibrated from "
+            "training-split positive probabilities only. Candidates are selected on "
+            "chronological validation folds, and strict mode fails closed before final "
+            "holdout when no candidate avoids fold metric/downside regressions or the "
+            "minimum validation exposure gate. Final holdout promotion also requires "
+            "the configured minimum final exposure. Robust diagnostics can rank by "
+            "combined lift, worst-fold validation utility, or fold-utility scoring."
         ),
     }
 
