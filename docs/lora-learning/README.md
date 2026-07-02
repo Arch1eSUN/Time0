@@ -61,3 +61,4 @@ Each note should answer four questions:
 - [048 - Finance Readiness Stop Gate](./048-finance-readiness-stop-gate.md)
 - [049 - Series Downside Veto](./049-series-downside-veto.md)
 - [050 - Series Risk Objective](./050-series-risk-objective.md)
+- [051 - Hard Constraints And All-Fallback Failure](./051-hard-constraints-and-all-fallback.md)

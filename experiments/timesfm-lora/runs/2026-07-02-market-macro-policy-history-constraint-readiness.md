@@ -22,8 +22,8 @@ specialize TimesFM 2.5 for 20-step market/macro realized-volatility forecasting 
 |---|---:|---:|---|
 | `fixed_average_mae_lift` | 2.000% | 1.724% | False |
 | `fixed_positive_cut_count` | 3 | 3 | True |
-| `router_extra_lift_vs_fallback` | 0.200% | 0.319% | True |
-| `router_negative_series` | 0 | 2 | False |
+| `router_extra_lift_vs_fallback` | 0.200% | 0.000% | False |
+| `router_negative_series` | 0 | 0 | True |
 | `zscore_fallback_sensitivity` | no fallback_sensitive verdicts in checked zscore reports | partial_positive, fallback_sensitive, fallback_sensitive | False |
 
 ## Fixed Adapter Evidence
@@ -46,14 +46,14 @@ Cuts: [3000, 3250, 3500, 3750, 4000, 4250, 4500, 4750, 5000, 5250, 5500]
 
 Fallback family: `recent2000`
 
-Release candidate source: `best_by_delta`
+Release candidate source: `best_no_negative_series`
 
 | Router checkpoint | Value |
 |---|---:|
-| extra lift vs fallback | 0.319% |
-| delta vs fallback | 0.0002931205 |
-| positive / negative series | 8 / 2 |
-| vetoed windows | 1378 |
+| extra lift vs fallback | 0.000% |
+| delta vs fallback | 0.0000000000 |
+| positive / negative series | 0 / 0 |
+| vetoed windows | 2538 |
 
 ## Sensitivity Evidence
 
@@ -67,7 +67,7 @@ Release candidate source: `best_by_delta`
 
 Fact: the current fixed `recent2000` adapter improves all three checked MAE cut-points but averages below the 2% release threshold.
 
-Fact: the current router release candidate adds a small lift over fixed `recent2000` but still has negative routed series.
+Fact: the current router release candidate has no negative routed series and 0.000% extra lift over fixed `recent2000`.
 
 Fact: the zscore all-recent branch remains fallback-sensitive and cannot be used as release evidence.
 

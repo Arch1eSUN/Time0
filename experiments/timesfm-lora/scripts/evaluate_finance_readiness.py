@@ -126,7 +126,21 @@ def evaluate_fixed_adapter(args: argparse.Namespace) -> dict[str, Any]:
 def evaluate_router(args: argparse.Namespace) -> dict[str, Any]:
     report = load_json(experiment_path(args.router_report))
     best = report["summary"]["best_veto_by_delta"]
+    no_negative = report["summary"].get("best_no_negative_series")
+    release_candidate = no_negative or best
     spread = report["summary"]["best_veto_by_series_spread"]
+    release_candidate_source = "best_no_negative_series" if no_negative else "best_by_delta"
+
+    def candidate_summary(candidate: dict[str, Any]) -> dict[str, Any]:
+        return {
+            "delta_vs_fallback": candidate["delta_vs_fallback"],
+            "relative_lift_vs_fallback": candidate["relative_lift_vs_fallback"],
+            "positive_routed_series_count": candidate["positive_routed_series_count"],
+            "negative_routed_series_count": candidate["negative_routed_series_count"],
+            "vetoed_windows": candidate["vetoed_windows"],
+            "top_negative_series": candidate["top_negative_series"],
+        }
+
     return {
         "source": args.router_report,
         "method": report["method"],
@@ -134,22 +148,11 @@ def evaluate_router(args: argparse.Namespace) -> dict[str, Any]:
         "rows": report["rows"],
         "cuts": report["cuts"],
         "fallback_family": report["fallback_family"],
-        "best_by_delta": {
-            "delta_vs_fallback": best["delta_vs_fallback"],
-            "relative_lift_vs_fallback": best["relative_lift_vs_fallback"],
-            "positive_routed_series_count": best["positive_routed_series_count"],
-            "negative_routed_series_count": best["negative_routed_series_count"],
-            "vetoed_windows": best["vetoed_windows"],
-            "top_negative_series": best["top_negative_series"],
-        },
-        "best_by_series_spread": {
-            "delta_vs_fallback": spread["delta_vs_fallback"],
-            "relative_lift_vs_fallback": spread["relative_lift_vs_fallback"],
-            "positive_routed_series_count": spread["positive_routed_series_count"],
-            "negative_routed_series_count": spread["negative_routed_series_count"],
-            "vetoed_windows": spread["vetoed_windows"],
-            "top_negative_series": spread["top_negative_series"],
-        },
+        "release_candidate_source": release_candidate_source,
+        "release_candidate": candidate_summary(release_candidate),
+        "best_by_delta": candidate_summary(best),
+        "best_no_negative_series": candidate_summary(no_negative) if no_negative else None,
+        "best_by_series_spread": candidate_summary(spread),
     }
 
 
@@ -179,7 +182,7 @@ def build_readiness_report(args: argparse.Namespace) -> dict[str, Any]:
     fixed = evaluate_fixed_adapter(args)
     router = evaluate_router(args)
     sensitivity = evaluate_sensitivity(args)
-    best_router = router["best_by_delta"]
+    best_router = router["release_candidate"]
 
     gates = {
         "fixed_average_mae_lift": {
@@ -251,8 +254,19 @@ def percent(value: float) -> str:
 def write_markdown(report: dict[str, Any], output_path: Path) -> None:
     fixed = report["fixed_adapter"]
     router = report["router"]
-    best_router = router["best_by_delta"]
+    best_router = router["release_candidate"]
     gates = report["release_gates"]
+    if int(best_router["negative_routed_series_count"]) == 0:
+        router_fact = (
+            "Fact: the current router release candidate has no negative routed "
+            f"series and {percent(best_router['relative_lift_vs_fallback'])} "
+            "extra lift over fixed `recent2000`."
+        )
+    else:
+        router_fact = (
+            "Fact: the current router release candidate adds a small lift over "
+            "fixed `recent2000` but still has negative routed series."
+        )
     lines = [
         "# Market Macro Finance Readiness Gate",
         "",
@@ -327,6 +341,8 @@ def write_markdown(report: dict[str, Any], output_path: Path) -> None:
             "",
             f"Fallback family: `{router['fallback_family']}`",
             "",
+            f"Release candidate source: `{router['release_candidate_source']}`",
+            "",
             "| Router checkpoint | Value |",
             "|---|---:|",
             f"| extra lift vs fallback | {percent(best_router['relative_lift_vs_fallback'])} |",
@@ -364,10 +380,7 @@ def write_markdown(report: dict[str, Any], output_path: Path) -> None:
                 "MAE cut-points but averages below the 2% release threshold."
             ),
             "",
-            (
-                "Fact: the current best router adds a small lift over fixed `recent2000` "
-                "but still has negative routed series."
-            ),
+            router_fact,
             "",
             (
                 "Fact: the zscore all-recent branch remains fallback-sensitive and cannot "
@@ -406,10 +419,11 @@ def main() -> None:
                 "output_md": str(output_md),
                 "verdict": report["verdict"],
                 "fixed_average_mae_lift": report["fixed_adapter"]["average_mae_relative_lift"],
-                "router_extra_lift": report["router"]["best_by_delta"][
+                "router_release_candidate": report["router"]["release_candidate_source"],
+                "router_extra_lift": report["router"]["release_candidate"][
                     "relative_lift_vs_fallback"
                 ],
-                "negative_router_series": report["router"]["best_by_delta"][
+                "negative_router_series": report["router"]["release_candidate"][
                     "negative_routed_series_count"
                 ],
             },

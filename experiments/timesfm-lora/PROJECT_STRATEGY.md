@@ -96,14 +96,16 @@ fixed recent2000 average MAE lift: 1.724% < 2.000% release gate
 best router extra lift vs fallback: 0.319%
 best router negative series: 2 > 0 release gate
 series-risk objective: no no-negative policy found
+policy-history hard constraint: only all-fallback reaches 0 negative series
 zscore all-recent branch: fallback-sensitive
 ```
 
 Interpretation: the finance direction has real signal, but it has not reached a
 clean stopping point. Continue only with experiments that can move a failed gate:
 average lift, per-series downside, or fallback sensitivity. The current
-threshold-veto router family should not be tuned indefinitely because extreme
-risk penalties reduce downside mass but do not satisfy the negative-series gate.
+threshold-veto router family should not be tuned indefinitely because soft risk
+penalties do not satisfy the negative-series gate, while hard policy-history
+constraints satisfy it only by removing all router lift.
 
 ## What Counts As Project Failure
 

@@ -47,6 +47,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--regret-threshold", type=float, action="append")
     parser.add_argument("--series-downside-threshold", type=float, action="append")
     parser.add_argument("--series-family-downside-threshold", type=float, action="append")
+    parser.add_argument("--policy-history-series-threshold", type=float, action="append")
+    parser.add_argument("--policy-history-min-windows", type=int, default=100)
     parser.add_argument("--series-risk-penalty", type=float, action="append")
     parser.add_argument("--feature-mode", choices=["global", "series"], action="append")
     return parser.parse_args()
@@ -160,6 +162,73 @@ def series_delta_summary(
     }
 
 
+def policy_history_series_delta_summary(
+    *,
+    prior_reports: list[dict[str, Any]],
+    fallback_family: str,
+    metric: MetricName,
+) -> dict[str, dict[str, float]]:
+    grouped: dict[str, list[float]] = {}
+    for report in prior_reports:
+        base_decision = report["decision"]["base_decision"]
+        if base_decision["mode"] == "cold_start":
+            continue
+        rows = report["rows"]
+        selected_families = report["selected_families"]
+        for row, selected_family in zip(rows, selected_families):
+            series_id = str(row["series_id"])
+            selected_error = family_error(row, selected_family, metric)
+            fallback_error = family_error(row, fallback_family, metric)
+            grouped.setdefault(series_id, []).append(fallback_error - selected_error)
+
+    summary: dict[str, dict[str, float]] = {}
+    for series_id, deltas in grouped.items():
+        summary[series_id] = {
+            "windows": len(deltas),
+            "mean_delta_vs_fallback": mean(deltas),
+            "sum_delta_vs_fallback": sum(deltas),
+            "harm_rate": sum(delta < 0.0 for delta in deltas) / len(deltas),
+        }
+    return summary
+
+
+def apply_policy_history_series_constraint(
+    *,
+    eval_rows: list[dict[str, Any]],
+    selected_families: list[str],
+    series_summary: dict[str, dict[str, float]],
+    fallback_family: str,
+    min_series_delta: float,
+    min_windows: int,
+) -> tuple[list[str], dict[str, Any]]:
+    constrained = list(selected_families)
+    current_overrides = 0
+    constrained_windows = 0
+    constrained_by_series: dict[str, int] = {}
+    for index, (row, selected_family) in enumerate(zip(eval_rows, selected_families)):
+        if selected_family == fallback_family:
+            continue
+        current_overrides += 1
+        series_id = str(row["series_id"])
+        stats = series_summary.get(series_id)
+        if stats is None or int(stats["windows"]) < min_windows:
+            continue
+        if float(stats["mean_delta_vs_fallback"]) <= min_series_delta:
+            constrained[index] = fallback_family
+            constrained_windows += 1
+            constrained_by_series[series_id] = constrained_by_series.get(series_id, 0) + 1
+
+    return constrained, {
+        "mode": "policy_history_series_constraint",
+        "historical_series": len(series_summary),
+        "current_overrides": current_overrides,
+        "min_series_delta": min_series_delta,
+        "min_windows": min_windows,
+        "constrained_windows": constrained_windows,
+        "constrained_by_series": dict(sorted(constrained_by_series.items())),
+    }
+
+
 def evaluate_veto_config(
     *,
     cuts: list[int],
@@ -173,6 +242,8 @@ def evaluate_veto_config(
     regret_threshold: float,
     series_downside_threshold: float | None,
     series_family_downside_threshold: float | None,
+    policy_history_series_threshold: float | None,
+    policy_history_min_windows: int,
 ) -> dict[str, Any]:
     per_cut: list[dict[str, Any]] = []
     for cut in cuts:
@@ -228,6 +299,21 @@ def evaluate_veto_config(
                 fallback_family=fallback_family,
                 min_series_family_delta=series_family_downside_threshold,
             )
+        policy_history_series_report = None
+        if policy_history_series_threshold is not None:
+            policy_history_summary = policy_history_series_delta_summary(
+                prior_reports=per_cut,
+                fallback_family=fallback_family,
+                metric=metric,
+            )
+            selected, policy_history_series_report = apply_policy_history_series_constraint(
+                eval_rows=eval_rows,
+                selected_families=selected,
+                series_summary=policy_history_summary,
+                fallback_family=fallback_family,
+                min_series_delta=policy_history_series_threshold,
+                min_windows=policy_history_min_windows,
+            )
         total_vetoed_windows = sum(
             1
             for base_family, selected_family in zip(base_selected, selected)
@@ -238,11 +324,13 @@ def evaluate_veto_config(
                 "neighbor_regret_veto_with_series_downside"
                 if series_downside_threshold is not None
                 or series_family_downside_threshold is not None
+                or policy_history_series_threshold is not None
                 else neighbor_veto_report["mode"]
             ),
             "neighbor": neighbor_veto_report,
             "series_downside": series_downside_report,
             "series_family_downside": series_family_downside_report,
+            "policy_history_series": policy_history_series_report,
             "vetoed_windows": total_vetoed_windows,
         }
         metrics = selection_metrics(rows=eval_rows, selected_families=selected, families=families, metric=metric)
@@ -281,6 +369,8 @@ def evaluate_veto_config(
         "regret_threshold": regret_threshold,
         "series_downside_threshold": series_downside_threshold,
         "series_family_downside_threshold": series_family_downside_threshold,
+        "policy_history_series_threshold": policy_history_series_threshold,
+        "policy_history_min_windows": policy_history_min_windows,
         "all_cuts": all_metrics,
         "routed_cuts_only": routed_metrics,
         "series_summary": series_summary,
@@ -353,6 +443,8 @@ def with_delta(policy: dict[str, Any], fallback_metric: float) -> dict[str, Any]
         "regret_threshold": policy.get("regret_threshold"),
         "series_downside_threshold": policy.get("series_downside_threshold"),
         "series_family_downside_threshold": policy.get("series_family_downside_threshold"),
+        "policy_history_series_threshold": policy.get("policy_history_series_threshold"),
+        "policy_history_min_windows": policy.get("policy_history_min_windows"),
         "selected_metric": selected_metric,
         "delta_vs_fallback": fallback_metric - selected_metric,
         "relative_lift_vs_fallback": improvement(fallback_metric, selected_metric),
@@ -389,6 +481,8 @@ def compact_policy_summary(policy: dict[str, Any] | None) -> dict[str, Any] | No
         "regret_threshold": policy.get("regret_threshold"),
         "series_downside_threshold": policy.get("series_downside_threshold"),
         "series_family_downside_threshold": policy.get("series_family_downside_threshold"),
+        "policy_history_series_threshold": policy.get("policy_history_series_threshold"),
+        "policy_history_min_windows": policy.get("policy_history_min_windows"),
         "delta_vs_fallback": policy.get("delta_vs_fallback"),
         "relative_lift_vs_fallback": policy.get("relative_lift_vs_fallback"),
         "positive_routed_series_count": policy.get("positive_routed_series_count"),
@@ -425,6 +519,11 @@ def build_report(args: argparse.Namespace) -> dict[str, Any]:
     series_family_downside_thresholds = (
         args.series_family_downside_threshold
         if args.series_family_downside_threshold is not None
+        else [None]
+    )
+    policy_history_series_thresholds = (
+        args.policy_history_series_threshold
+        if args.policy_history_series_threshold is not None
         else [None]
     )
     series_risk_penalties = args.series_risk_penalty or [1.0, 2.0, 5.0, 10.0, 50.0, 100.0]
@@ -464,21 +563,24 @@ def build_report(args: argparse.Namespace) -> dict[str, Any]:
             for regret_threshold in regret_thresholds:
                 for series_downside_threshold in series_downside_thresholds:
                     for series_family_downside_threshold in series_family_downside_thresholds:
-                        veto_policies.append(
-                            evaluate_veto_config(
-                                cuts=cuts,
-                                cut_rows=cut_rows,
-                                base_selections=base_selections,
-                                families=families,
-                                metric=args.metric,
-                                fallback_family=args.fallback_family,
-                                include_series=feature_mode == "series",
-                                k=k,
-                                regret_threshold=regret_threshold,
-                                series_downside_threshold=series_downside_threshold,
-                                series_family_downside_threshold=series_family_downside_threshold,
+                        for policy_history_series_threshold in policy_history_series_thresholds:
+                            veto_policies.append(
+                                evaluate_veto_config(
+                                    cuts=cuts,
+                                    cut_rows=cut_rows,
+                                    base_selections=base_selections,
+                                    families=families,
+                                    metric=args.metric,
+                                    fallback_family=args.fallback_family,
+                                    include_series=feature_mode == "series",
+                                    k=k,
+                                    regret_threshold=regret_threshold,
+                                    series_downside_threshold=series_downside_threshold,
+                                    series_family_downside_threshold=series_family_downside_threshold,
+                                    policy_history_series_threshold=policy_history_series_threshold,
+                                    policy_history_min_windows=args.policy_history_min_windows,
+                                )
                             )
-                        )
 
     base_summary = with_delta(base, float(fallback_metric))
     veto_summaries = [with_delta(policy, float(fallback_metric)) for policy in veto_policies]
