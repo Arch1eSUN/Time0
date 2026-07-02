@@ -185,6 +185,7 @@ def fold_attribution(
     fallback_family: str,
     metric: MetricName,
     include_series: bool,
+    feature_surface: str,
     consensus_mode: str,
     top_n: int,
 ) -> dict[str, Any]:
@@ -193,6 +194,8 @@ def fold_attribution(
         examples=training_examples,
         families=families,
         include_series=include_series,
+        feature_surface=feature_surface,
+        fallback_family=fallback_family,
         config=config,
         consensus_mode=consensus_mode,
     )
@@ -203,6 +206,7 @@ def fold_attribution(
         families=families,
         fallback_family=fallback_family,
         include_series=include_series,
+        feature_surface=feature_surface,
         consensus_mode=consensus_mode,
     )
     changed_rows: list[dict[str, Any]] = []
@@ -234,6 +238,7 @@ def fold_attribution(
         "mean_help_delta": mean(helped_deltas),
         "mean_harm_delta": mean(harmed_deltas),
         "veto": veto_stats,
+        "feature_surface": feature_surface,
         "worst_series": grouped_delta(changed_rows, changed_deltas, ["series_id"], top_n=top_n),
         "worst_original_families": grouped_family_delta(
             changed_rows,
@@ -259,6 +264,7 @@ def build_report(args: argparse.Namespace) -> dict[str, Any]:
     metric = str(source_report.get("metric", "mae"))
     fallback_family = str(source_report.get("fallback_family", "recent2000"))
     include_series = bool(source_report.get("include_series", False))
+    feature_surface = str(source_report.get("feature_surface", "base"))
     consensus_mode = str(source_report.get("consensus_mode") or "single")
     config_payload = selected_config_from_report(source_report)
 
@@ -313,6 +319,7 @@ def build_report(args: argparse.Namespace) -> dict[str, Any]:
                 fallback_family=fallback_family,
                 metric=metric,
                 include_series=include_series,
+                feature_surface=feature_surface,
                 consensus_mode=consensus_mode,
                 top_n=args.top_n,
             )
@@ -330,6 +337,7 @@ def build_report(args: argparse.Namespace) -> dict[str, Any]:
         "metric": metric,
         "fallback_family": fallback_family,
         "include_series": include_series,
+        "feature_surface": feature_surface,
         "consensus_mode": consensus_mode,
         "selected_config": config_payload,
         "initial_discovery_max_cut": initial_discovery_max_cut,
@@ -358,6 +366,7 @@ def main() -> None:
                 "output": str(output_path),
                 "source_report": report["source_report"],
                 "selected_config": report["selected_config"],
+                "feature_surface": report["feature_surface"],
                 "validation_cuts": report["validation_cuts"],
                 "regression_fold_count": report["regression_fold_count"],
                 "worst_fold": {

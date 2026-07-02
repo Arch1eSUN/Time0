@@ -26,7 +26,7 @@ from evaluate_router_fallback_veto import (
     experiment_path,
     series_delta_summary,
 )
-from router_fallback_veto import VetoExample, build_veto_matrix
+from router_fallback_veto import VetoExample, build_veto_matrix, feature_surface_summary
 from validate_feature_veto_rule import relative_lift
 from validate_multifold_feature_veto import changed_windows, default_validation_cuts, metric_delta, subset_by_predicate
 from validate_multifold_supervised_veto import supervised_examples
@@ -56,6 +56,7 @@ class UtilityConfig:
 @dataclass(frozen=True)
 class ExpectedRegretModel:
     config: ExpectedRegretConfig
+    feature_surface: str
     frame: FeatureFrame
     mean: np.ndarray
     scale: np.ndarray
@@ -111,6 +112,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--min-utility-score", type=float, default=0.0)
     parser.add_argument("--selection-gate", choices=["strict", "robust"], default="strict")
     parser.add_argument("--include-series", action="store_true")
+    parser.add_argument("--feature-surface", choices=["base", "alignment-risk"], default="base")
     return parser.parse_args()
 
 
@@ -222,6 +224,8 @@ def train_expected_regret_model(
     examples: list[VetoExample],
     families: list[str],
     include_series: bool,
+    feature_surface: str,
+    fallback_family: str,
     config: ExpectedRegretConfig,
 ) -> ExpectedRegretModel:
     if not examples:
@@ -235,6 +239,8 @@ def train_expected_regret_model(
         selected_families=train_families,
         families=families,
         include_series=include_series,
+        feature_surface=feature_surface,
+        fallback_family=fallback_family,
     )
     mean = np.nanmean(matrix, axis=0)
     scale = np.nanstd(matrix, axis=0)
@@ -246,6 +252,7 @@ def train_expected_regret_model(
     errors = predictions - targets
     return ExpectedRegretModel(
         config=config,
+        feature_surface=feature_surface,
         frame=frame,
         mean=mean,
         scale=scale,
@@ -279,6 +286,8 @@ def train_expected_regret_models(
     examples: list[VetoExample],
     families: list[str],
     include_series: bool,
+    feature_surface: str,
+    fallback_family: str,
     config: ExpectedRegretConfig,
     consensus_mode: str,
 ) -> list[ExpectedRegretModel]:
@@ -287,6 +296,8 @@ def train_expected_regret_models(
             examples=partition,
             families=families,
             include_series=include_series,
+            feature_surface=feature_surface,
+            fallback_family=fallback_family,
             config=config,
         )
         for partition in training_example_partitions(examples, consensus_mode=consensus_mode)
@@ -318,10 +329,13 @@ def apply_expected_regret_veto(
     families: list[str],
     fallback_family: str,
     include_series: bool,
+    feature_surface: str,
     consensus_mode: str,
 ) -> tuple[list[str], dict[str, Any]]:
     if not models:
         raise ValueError("cannot apply expected-regret veto without trained models")
+    if any(model.feature_surface != feature_surface for model in models):
+        raise ValueError("model feature surface does not match requested feature surface")
     reference_model = models[-1]
     consensus_min_models = min(reference_model.config.consensus_min_models, len(models))
     override_indices = [
@@ -333,6 +347,7 @@ def apply_expected_regret_veto(
             "changed_windows": 0,
             "training_examples": reference_model.training_examples,
             "consensus_mode": consensus_mode,
+            "feature_surface": feature_surface,
             "consensus_models": len(models),
             "consensus_min_models": reference_model.config.consensus_min_models,
             "effective_consensus_min_models": consensus_min_models,
@@ -348,6 +363,8 @@ def apply_expected_regret_veto(
             families=families,
             include_series=include_series,
             reference=model.frame,
+            feature_surface=feature_surface,
+            fallback_family=fallback_family,
         )
         features = normalized_matrix(matrix, model.mean, model.scale)
         model_predictions.append(features @ model.weights + model.bias)
@@ -383,6 +400,7 @@ def apply_expected_regret_veto(
         "training_target_mae": reference_model.training_target_mae,
         "training_target_rmse": reference_model.training_target_rmse,
         "consensus_mode": consensus_mode,
+        "feature_surface": feature_surface,
         "consensus_models": len(models),
         "consensus_min_models": reference_model.config.consensus_min_models,
         "effective_consensus_min_models": consensus_min_models,
@@ -408,6 +426,7 @@ def expected_regret_split_report(
     fallback_family: str,
     metric: MetricName,
     include_series: bool,
+    feature_surface: str,
     consensus_mode: str,
 ) -> dict[str, Any]:
     if not rows:
@@ -419,6 +438,7 @@ def expected_regret_split_report(
             "original": None,
             "feature_veto": None,
             "veto": {"changed_windows": 0},
+            "feature_surface": feature_surface,
             "metric_delta": 0.0,
             "relative_metric_delta_vs_original": 0.0,
             "verdict": "no_windows",
@@ -440,6 +460,8 @@ def expected_regret_split_report(
         examples=training_examples,
         families=families,
         include_series=include_series,
+        feature_surface=feature_surface,
+        fallback_family=fallback_family,
         config=config,
         consensus_mode=consensus_mode,
     )
@@ -450,6 +472,7 @@ def expected_regret_split_report(
         families=families,
         fallback_family=fallback_family,
         include_series=include_series,
+        feature_surface=feature_surface,
         consensus_mode=consensus_mode,
     )
     veto_metrics = selection_metrics(
@@ -497,6 +520,7 @@ def expected_regret_split_report(
             ),
         },
         "veto": veto_stats,
+        "feature_surface": feature_surface,
         "metric_delta": metric_delta_value,
         "relative_metric_delta_vs_original": metric_delta_value / original_metric,
         "verdict": verdict,
@@ -514,6 +538,7 @@ def validation_score(
     fallback_family: str,
     metric: MetricName,
     include_series: bool,
+    feature_surface: str,
     consensus_mode: str,
     max_fold_no_exposure: int,
 ) -> dict[str, Any]:
@@ -527,6 +552,7 @@ def validation_score(
         fallback_family=fallback_family,
         metric=metric,
         include_series=include_series,
+        feature_surface=feature_surface,
         consensus_mode=consensus_mode,
     )
     fold_reports: list[dict[str, Any]] = []
@@ -549,6 +575,7 @@ def validation_score(
                 fallback_family=fallback_family,
                 metric=metric,
                 include_series=include_series,
+                feature_surface=feature_surface,
                 consensus_mode=consensus_mode,
             )
         )
@@ -788,6 +815,7 @@ def build_report(args: argparse.Namespace) -> dict[str, Any]:
             fallback_family=args.fallback_family,
             metric=args.metric,
             include_series=args.include_series,
+            feature_surface=args.feature_surface,
             consensus_mode=args.consensus_mode,
             max_fold_no_exposure=args.max_validation_fold_no_exposure,
         )
@@ -811,6 +839,7 @@ def build_report(args: argparse.Namespace) -> dict[str, Any]:
             fallback_family=args.fallback_family,
             metric=args.metric,
             include_series=args.include_series,
+            feature_surface=args.feature_surface,
             consensus_mode=args.consensus_mode,
         )
         verdict = verdict_for_final(final_report)
@@ -824,6 +853,8 @@ def build_report(args: argparse.Namespace) -> dict[str, Any]:
         "metric": args.metric,
         "fallback_family": args.fallback_family,
         "include_series": args.include_series,
+        "feature_surface": args.feature_surface,
+        "feature_surface_summary": feature_surface_summary(args.feature_surface),
         "consensus_mode": args.consensus_mode,
         "selection_gate": args.selection_gate,
         "initial_discovery_max_cut": args.initial_discovery_max_cut,
@@ -879,6 +910,7 @@ def main() -> None:
         "verdict": report["verdict"],
         "selection_gate": report["selection_gate"],
         "consensus_mode": report["consensus_mode"],
+        "feature_surface": report["feature_surface"],
         "validation_cuts": report["validation_cuts"],
         "discovery_examples": report["discovery_examples"],
         "final_train_examples": report["final_train_examples"],

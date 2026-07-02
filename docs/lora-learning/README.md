@@ -76,3 +76,4 @@ Each note should answer four questions:
 - [063 - Utility-Aware Selection](./063-utility-aware-selection.md)
 - [064 - Consensus Gating](./064-consensus-gating.md)
 - [065 - Fold Regression Attribution](./065-fold-regression-attribution.md)
+- [066 - Alignment-Risk Features](./066-alignment-risk-features.md)

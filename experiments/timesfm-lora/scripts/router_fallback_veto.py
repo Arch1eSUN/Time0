@@ -9,6 +9,17 @@ from evaluate_prediction_router import FeatureFrame, build_feature_frame, family
 
 
 MetricName = str
+FeatureSurfaceName = str
+
+
+ALIGNMENT_RISK_FEATURE_SURFACE = "alignment-risk"
+FEATURE_SURFACE_BASE = "base"
+
+ALIGNMENT_RISK_SUFFIXES = (
+    "predicted_trend_minus_past_trend",
+    "predicted_last_delta_from_past_last_over_std",
+    "predicted_mean_delta_from_past_last_over_std",
+)
 
 
 @dataclass(frozen=True)
@@ -193,6 +204,75 @@ def selected_family_matrix(selected_families: list[str], families: list[str]) ->
     return matrix
 
 
+def numeric_feature(features: dict[str, Any], key: str) -> float:
+    return float(features.get(key, 0.0))
+
+
+def family_alignment_value(alignment: dict[str, Any], family: str, suffix: str) -> float:
+    return numeric_feature(alignment, f"{family}_{suffix}")
+
+
+def sign_mismatch(left: float, right: float) -> float:
+    return 1.0 if left * right < 0.0 else 0.0
+
+
+def alignment_risk_values(
+    *,
+    row: dict[str, Any],
+    selected_family: str,
+    families: list[str],
+    fallback_family: str,
+) -> list[float]:
+    runtime_features = row["runtime_features"]
+    alignment = runtime_features.get("prediction_context_alignment", {})
+    context = runtime_features.get("context", {})
+    past_trend = numeric_feature(context, "past_trend")
+
+    selected_values = [
+        family_alignment_value(alignment, selected_family, suffix)
+        for suffix in ALIGNMENT_RISK_SUFFIXES
+    ]
+    fallback_values = [
+        family_alignment_value(alignment, fallback_family, suffix)
+        for suffix in ALIGNMENT_RISK_SUFFIXES
+    ]
+    family_max_abs_values = [
+        max(abs(family_alignment_value(alignment, family, suffix)) for family in families)
+        for suffix in ALIGNMENT_RISK_SUFFIXES
+    ]
+    selected_predicted_trend = past_trend + selected_values[0]
+
+    return [
+        *(abs(value) for value in selected_values),
+        *(abs(value) for value in fallback_values),
+        *(abs(selected) - abs(fallback) for selected, fallback in zip(selected_values, fallback_values)),
+        *family_max_abs_values,
+        sign_mismatch(selected_predicted_trend, past_trend),
+        sign_mismatch(selected_values[1], past_trend),
+    ]
+
+
+def alignment_risk_matrix(
+    *,
+    rows: list[dict[str, Any]],
+    selected_families: list[str],
+    families: list[str],
+    fallback_family: str,
+) -> np.ndarray:
+    values = [
+        alignment_risk_values(
+            row=row,
+            selected_family=selected_family,
+            families=families,
+            fallback_family=fallback_family,
+        )
+        for row, selected_family in zip(rows, selected_families)
+    ]
+    if not values:
+        return np.zeros((0, 14), dtype=float)
+    return np.array(values, dtype=float)
+
+
 def build_veto_matrix(
     *,
     rows: list[dict[str, Any]],
@@ -200,6 +280,8 @@ def build_veto_matrix(
     families: list[str],
     include_series: bool,
     reference: FeatureFrame | None = None,
+    feature_surface: FeatureSurfaceName = FEATURE_SURFACE_BASE,
+    fallback_family: str = "recent2000",
 ) -> tuple[FeatureFrame, np.ndarray]:
     if reference is None:
         series_ids = sorted({str(row["series_id"]) for row in rows}) if include_series else []
@@ -213,7 +295,48 @@ def build_veto_matrix(
         reference=reference,
     )
     family_matrix = selected_family_matrix(selected_families, families)
-    return frame, np.c_[frame.matrix, family_matrix]
+    matrix = np.c_[frame.matrix, family_matrix]
+    if feature_surface == FEATURE_SURFACE_BASE:
+        return frame, matrix
+    if feature_surface != ALIGNMENT_RISK_FEATURE_SURFACE:
+        raise ValueError(f"unsupported feature surface: {feature_surface}")
+
+    risk_matrix = alignment_risk_matrix(
+        rows=rows,
+        selected_families=selected_families,
+        families=families,
+        fallback_family=fallback_family,
+    )
+    return frame, np.c_[matrix, risk_matrix]
+
+
+def feature_surface_summary(feature_surface: FeatureSurfaceName) -> dict[str, Any]:
+    if feature_surface == FEATURE_SURFACE_BASE:
+        return {
+            "feature_surface": feature_surface,
+            "extra_features": [],
+        }
+    if feature_surface != ALIGNMENT_RISK_FEATURE_SURFACE:
+        raise ValueError(f"unsupported feature surface: {feature_surface}")
+    return {
+        "feature_surface": feature_surface,
+        "extra_features": [
+            "selected_abs_predicted_trend_minus_past_trend",
+            "selected_abs_predicted_last_delta_from_past_last_over_std",
+            "selected_abs_predicted_mean_delta_from_past_last_over_std",
+            "fallback_abs_predicted_trend_minus_past_trend",
+            "fallback_abs_predicted_last_delta_from_past_last_over_std",
+            "fallback_abs_predicted_mean_delta_from_past_last_over_std",
+            "selected_minus_fallback_abs_predicted_trend_minus_past_trend",
+            "selected_minus_fallback_abs_predicted_last_delta_from_past_last_over_std",
+            "selected_minus_fallback_abs_predicted_mean_delta_from_past_last_over_std",
+            "family_max_abs_predicted_trend_minus_past_trend",
+            "family_max_abs_predicted_last_delta_from_past_last_over_std",
+            "family_max_abs_predicted_mean_delta_from_past_last_over_std",
+            "selected_predicted_trend_sign_mismatch",
+            "selected_last_delta_direction_mismatch",
+        ],
+    }
 
 
 def apply_neighbor_regret_veto(

@@ -111,6 +111,7 @@ expected-regret fallback veto: continuous regret regression increases loose vali
 utility-aware expected-regret veto: validation utility scoring filters high-lift false positives, but no candidate reaches strict fold-level promotion
 temporal-prefix consensus veto: prefix-model agreement does not reduce fold regressions, so the next lever is failure attribution or new no-leak features
 fold-regression attribution: strict failures localize to specific folds/series/families, and prediction-context alignment features are the next feature-surface lever
+alignment-risk feature surface: raw derived alignment-risk features remain strict-blocked and do not beat base in robust final diagnostics, so the next lever is smaller or more regularized alignment input
 zscore all-recent branch: fallback-sensitive
 ```
 
@@ -234,6 +235,18 @@ the worst is cut4000 (`metric_delta=-0.0003824223`), dominated by DFF harm
 separate strongly on prediction-context alignment features such as
 predicted-trend-minus-past-trend and predicted-last-vs-past-last-over-std. The
 next useful step is an alignment-risk feature experiment, not another gate.
+
+Latest alignment-risk feature diagnostic: adding 14 raw derived alignment-risk
+features does not produce a promotion candidate. No-series strict validation
+still has `0` strict-positive candidates; loose robust-pass candidates rise
+from `14` to `16`, but utility-positive candidates fall from `5` to `0`.
+Include-series alignment-risk has one small strict fold regression at cut4000
+(`metric_delta=-0.0000212966`) and robust final holdout stays positive
+(`final_metric_delta=+0.0001575894`), but it is still slightly weaker than base
+include-series robust final holdout (`+0.0001617361`). Keep
+`--feature-surface alignment-risk` as an experimental seam, not a default; the
+next useful step is compact/regularized alignment features rather than adding
+more raw columns.
 
 ## What Counts As Project Failure
 
