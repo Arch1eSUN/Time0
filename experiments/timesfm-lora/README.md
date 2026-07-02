@@ -114,6 +114,7 @@ downside-aware feature veto: discovery-side downside filtering and downside-firs
 multi-fold feature veto: chronological validation selects a prediction-context alignment rule that improves final holdout incrementally and keeps negative series 2 -> 2, but remains below fixed recent2000 fallback, so it is not promotion-ready.
 two-feature veto: AND rules improve final holdout more than single-feature veto and keep negative series 2 -> 2, but strict multi-fold robust pass is 0 and final lift remains below fallback.
 score-vote veto: voting over discovery-selected single-feature rules expands final exposure to 72 changed windows and improves final MAE while keeping negative series 2 -> 2, but validation has 0 robust-pass and 0 positive candidates, so the signal is diagnostic only.
+supervised KNN-regret veto: no-series supervised routing finds validation-positive candidates but final holdout regresses; series-aware sensitivity improves final slightly but fails validation, so supervised routing remains blocked by transfer stability.
 ```
 
 ## Data Contract

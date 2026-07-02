@@ -104,6 +104,7 @@ downside-aware feature veto: discovery downside control does not transfer to fut
 multi-fold feature veto: validation gate improves rule selection, but single-feature policy remains below fallback
 two-feature veto: deeper hand-written AND policy improves incrementally, but is sparse and still below fallback
 score-vote veto: wider hand-written vote policy improves final holdout, but validation has 0 robust-pass and 0 positive candidates
+supervised KNN-regret veto: learned no-series router passes loose validation but fails final; series-aware sensitivity is final-positive but validation-negative
 zscore all-recent branch: fallback-sensitive
 ```
 
@@ -157,6 +158,18 @@ the chronological validation folds. Treat the final improvement as signal, not
 promotion evidence. Stop hand-written threshold ensembles; the next router step
 should be a supervised no-leak fallback-veto or regret model under the same
 multi-fold gate.
+
+Latest supervised-router diagnostic: a no-series KNN-regret fallback veto finds
+5 loose robust-pass and 6 validation-positive candidates, but every
+validation-positive candidate has fold-level metric regressions
+(`validation_strict_positive_count=0`). The selected `k=25`,
+`regret_threshold=0.001` policy fails final holdout with
+`metric_delta=-0.0000276801` and keeps negative series unchanged at 2. A
+series-aware sensitivity improves final holdout slightly, but has 0 robust-pass
+and 0 validation-positive candidates. Treat this as a transfer-stability
+failure. The next router step should require strict fold-level validation before
+promotion, or move to a calibrated supervised probability model with explicit
+downside constraints.
 
 ## What Counts As Project Failure
 

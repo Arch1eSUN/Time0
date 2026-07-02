@@ -69,3 +69,4 @@ Each note should answer four questions:
 - [056 - Multi-Fold Router Validation](./056-multifold-router-validation.md)
 - [057 - Two-Feature Veto And Policy Depth](./057-two-feature-veto-and-policy-depth.md)
 - [058 - Score-Based Router](./058-score-based-router.md)
+- [059 - Supervised Router Transfer](./059-supervised-router-transfer.md)
