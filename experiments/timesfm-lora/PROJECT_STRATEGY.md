@@ -103,6 +103,7 @@ feature veto frozen validation: aggregate future signal exists, but downside reg
 downside-aware feature veto: discovery downside control does not transfer to future downside
 multi-fold feature veto: validation gate improves rule selection, but single-feature policy remains below fallback
 two-feature veto: deeper hand-written AND policy improves incrementally, but is sparse and still below fallback
+score-vote veto: wider hand-written vote policy improves final holdout, but validation has 0 robust-pass and 0 positive candidates
 zscore all-recent branch: fallback-sensitive
 ```
 
@@ -147,6 +148,15 @@ but strict multi-fold robust-pass count is 0 because validation exposure is
 sparse. The final policy still remains below fixed fallback. Stop hand-growing
 veto conjunctions; the next policy class should be score-based or supervised
 under the same multi-fold gate.
+
+Latest score-vote diagnostic: voting over discovery-selected single-feature
+rules increases final holdout exposure to 72 changed windows and improves the
+current router while keeping negative series unchanged at 2. However, the same
+candidate class has 0 robust-pass and 0 validation-positive candidates across
+the chronological validation folds. Treat the final improvement as signal, not
+promotion evidence. Stop hand-written threshold ensembles; the next router step
+should be a supervised no-leak fallback-veto or regret model under the same
+multi-fold gate.
 
 ## What Counts As Project Failure
 

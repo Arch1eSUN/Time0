@@ -68,3 +68,4 @@ Each note should answer four questions:
 - [055 - Discovery Downside vs Future Downside](./055-discovery-downside-vs-future-downside.md)
 - [056 - Multi-Fold Router Validation](./056-multifold-router-validation.md)
 - [057 - Two-Feature Veto And Policy Depth](./057-two-feature-veto-and-policy-depth.md)
+- [058 - Score-Based Router](./058-score-based-router.md)
