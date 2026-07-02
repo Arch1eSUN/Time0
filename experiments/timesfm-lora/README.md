@@ -115,6 +115,7 @@ multi-fold feature veto: chronological validation selects a prediction-context a
 two-feature veto: AND rules improve final holdout more than single-feature veto and keep negative series 2 -> 2, but strict multi-fold robust pass is 0 and final lift remains below fallback.
 score-vote veto: voting over discovery-selected single-feature rules expands final exposure to 72 changed windows and improves final MAE while keeping negative series 2 -> 2, but validation has 0 robust-pass and 0 positive candidates, so the signal is diagnostic only.
 supervised KNN-regret veto: no-series supervised routing finds validation-positive candidates but final holdout regresses; series-aware sensitivity improves final slightly but fails validation, so supervised routing remains blocked by transfer stability.
+strict supervised gate: requiring zero fold metric regressions rejects all current supervised KNN-regret candidates and fails closed before final holdout, preserving final evaluation for stronger candidates.
 ```
 
 ## Data Contract

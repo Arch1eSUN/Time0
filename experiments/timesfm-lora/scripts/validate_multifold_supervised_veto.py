@@ -72,6 +72,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--k", type=int, action="append")
     parser.add_argument("--regret-threshold", type=float, action="append")
     parser.add_argument("--max-validation-fold-no-exposure", type=int, default=0)
+    parser.add_argument("--selection-gate", choices=["robust", "strict"], default="robust")
     parser.add_argument("--include-series", action="store_true")
     return parser.parse_args()
 
@@ -325,20 +326,12 @@ def validation_score(
     }
 
 
-def select_validation_config(scores: list[dict[str, Any]]) -> dict[str, Any]:
-    passing = [score for score in scores if bool(score["summary"]["robust_pass"])]
-    validation_positive = [
-        score
-        for score in scores
-        if float(score["summary"]["combined_metric_delta"]) > 0.0
-        and int(score["summary"]["combined_negative_series_delta"]) <= 0
-        and int(score["summary"]["fold_negative_regressions"]) == 0
-    ]
-    pool = passing or validation_positive or scores
-    ranked = sorted(
-        pool,
+def ranked_validation_scores(scores: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return sorted(
+        scores,
         key=lambda score: (
             bool(score["summary"]["robust_pass"]),
+            strict_validation_positive(score),
             float(score["summary"]["combined_metric_delta"]) > 0.0,
             -int(score["summary"]["fold_negative_regressions"]),
             -int(score["summary"]["combined_negative_series_delta"]),
@@ -349,6 +342,31 @@ def select_validation_config(scores: list[dict[str, Any]]) -> dict[str, Any]:
         ),
         reverse=True,
     )
+
+
+def select_validation_config(scores: list[dict[str, Any]], *, selection_gate: str) -> dict[str, Any]:
+    strict_passing = [score for score in scores if strict_validation_positive(score)]
+    if selection_gate == "strict":
+        if not strict_passing:
+            return {
+                "selection_reason": "strict_gate_no_candidate",
+                "strict_gate_pass": False,
+            }
+        selected = dict(ranked_validation_scores(strict_passing)[0])
+        selected["selection_reason"] = "strict_positive"
+        selected["strict_gate_pass"] = True
+        return selected
+
+    passing = [score for score in scores if bool(score["summary"]["robust_pass"])]
+    validation_positive = [
+        score
+        for score in scores
+        if float(score["summary"]["combined_metric_delta"]) > 0.0
+        and int(score["summary"]["combined_negative_series_delta"]) <= 0
+        and int(score["summary"]["fold_negative_regressions"]) == 0
+    ]
+    pool = passing or validation_positive or scores
+    ranked = ranked_validation_scores(pool)
     selected = dict(ranked[0])
     if passing:
         selected["selection_reason"] = "robust_pass"
@@ -356,6 +374,7 @@ def select_validation_config(scores: list[dict[str, Any]]) -> dict[str, Any]:
         selected["selection_reason"] = "validation_positive_no_robust_pass"
     else:
         selected["selection_reason"] = "best_available_no_robust_pass"
+    selected["strict_gate_pass"] = strict_validation_positive(selected)
     return selected
 
 
@@ -479,19 +498,24 @@ def build_report(args: argparse.Namespace) -> dict[str, Any]:
         )
         for config in configs
     ]
-    selected_validation = select_validation_config(validation_scores)
-    selected_config = config_from_summary(selected_validation["config"])
-    final_report = supervised_split_report(
-        name="final_holdout_after_validation",
-        rows=final_rows,
-        selected_families=final_selected,
-        training_examples=final_train_examples,
-        config=selected_config,
-        families=families,
-        fallback_family=args.fallback_family,
-        metric=args.metric,
-        include_series=args.include_series,
-    )
+    selected_validation = select_validation_config(validation_scores, selection_gate=args.selection_gate)
+    selected_config: SupervisedVetoConfig | None = None
+    final_report: dict[str, Any] | None = None
+    verdict = "strict_gate_no_candidate"
+    if args.selection_gate != "strict" or bool(selected_validation.get("strict_gate_pass", True)):
+        selected_config = config_from_summary(selected_validation["config"])
+        final_report = supervised_split_report(
+            name="final_holdout_after_validation",
+            rows=final_rows,
+            selected_families=final_selected,
+            training_examples=final_train_examples,
+            config=selected_config,
+            families=families,
+            fallback_family=args.fallback_family,
+            metric=args.metric,
+            include_series=args.include_series,
+        )
+        verdict = verdict_for_final(final_report)
 
     return {
         "method": "multifold_supervised_knn_regret_veto_validation",
@@ -502,6 +526,7 @@ def build_report(args: argparse.Namespace) -> dict[str, Any]:
         "metric": args.metric,
         "fallback_family": args.fallback_family,
         "include_series": args.include_series,
+        "selection_gate": args.selection_gate,
         "initial_discovery_max_cut": args.initial_discovery_max_cut,
         "validation_cuts": validation_cuts,
         "final_holdout_min_cut": args.final_holdout_min_cut,
@@ -518,29 +543,17 @@ def build_report(args: argparse.Namespace) -> dict[str, Any]:
         "validation_strict_positive_count": sum(strict_validation_positive(score) for score in validation_scores),
         "validation_score_summaries": [
             compact_validation_score(score)
-            for score in sorted(
-                validation_scores,
-                key=lambda score: (
-                    bool(score["summary"]["robust_pass"]),
-                    float(score["summary"]["combined_metric_delta"]) > 0.0,
-                    -int(score["summary"]["fold_negative_regressions"]),
-                    -int(score["summary"]["combined_negative_series_delta"]),
-                    float(score["summary"]["combined_metric_delta"]),
-                    -int(score["summary"]["fold_metric_regressions"]),
-                    -int(score["summary"]["fold_no_exposure"]),
-                    changed_windows(score["combined"]),
-                ),
-                reverse=True,
-            )
+            for score in ranked_validation_scores(validation_scores)
         ],
         "selected_validation": selected_validation,
-        "selected_config": config_summary(selected_config),
+        "selected_config": config_summary(selected_config) if selected_config else None,
+        "final_holdout_evaluated": final_report is not None,
         "final_holdout": final_report,
-        "verdict": verdict_for_final(final_report),
+        "verdict": verdict,
         "guardrail": (
             "KNN-regret veto configs are trained on discovery override examples, "
-            "selected on chronological validation folds, then retrained only on "
-            "pre-final examples before one final holdout evaluation."
+            "selected on chronological validation folds, and strict mode fails closed "
+            "before final holdout when no candidate avoids fold metric/downside regressions."
         ),
     }
 
@@ -551,21 +564,25 @@ def main() -> None:
     output_path = experiment_path(args.output)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(json.dumps(report, indent=2) + "\n")
+    payload = {
+        "output": str(output_path),
+        "verdict": report["verdict"],
+        "selection_gate": report["selection_gate"],
+        "validation_cuts": report["validation_cuts"],
+        "discovery_examples": report["discovery_examples"],
+        "final_train_examples": report["final_train_examples"],
+        "validation_candidate_count": report["validation_candidate_count"],
+        "validation_robust_pass_count": report["validation_robust_pass_count"],
+        "validation_positive_count": report["validation_positive_count"],
+        "validation_strict_positive_count": report["validation_strict_positive_count"],
+        "selected_config": report["selected_config"],
+        "selection_reason": report["selected_validation"]["selection_reason"],
+        "final_holdout_evaluated": report["final_holdout_evaluated"],
+    }
     final_holdout = report["final_holdout"]
-    print(
-        json.dumps(
+    if final_holdout is not None:
+        payload.update(
             {
-                "output": str(output_path),
-                "verdict": report["verdict"],
-                "validation_cuts": report["validation_cuts"],
-                "discovery_examples": report["discovery_examples"],
-                "final_train_examples": report["final_train_examples"],
-                "validation_candidate_count": report["validation_candidate_count"],
-                "validation_robust_pass_count": report["validation_robust_pass_count"],
-                "validation_positive_count": report["validation_positive_count"],
-                "validation_strict_positive_count": report["validation_strict_positive_count"],
-                "selected_config": report["selected_config"],
-                "selection_reason": report["selected_validation"]["selection_reason"],
                 "final_windows": final_holdout["windows"],
                 "final_changed_windows": final_holdout["veto"]["changed_windows"],
                 "final_metric_delta": final_holdout["metric_delta"],
@@ -575,10 +592,9 @@ def main() -> None:
                 },
                 "final_relative_lift": final_holdout["feature_veto"]["relative_lift_vs_fallback"],
                 "final_verdict": final_holdout["verdict"],
-            },
-            indent=2,
+            }
         )
-    )
+    print(json.dumps(payload, indent=2))
 
 
 if __name__ == "__main__":

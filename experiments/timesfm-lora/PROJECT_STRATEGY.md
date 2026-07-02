@@ -105,6 +105,7 @@ multi-fold feature veto: validation gate improves rule selection, but single-fea
 two-feature veto: deeper hand-written AND policy improves incrementally, but is sparse and still below fallback
 score-vote veto: wider hand-written vote policy improves final holdout, but validation has 0 robust-pass and 0 positive candidates
 supervised KNN-regret veto: learned no-series router passes loose validation but fails final; series-aware sensitivity is final-positive but validation-negative
+strict supervised gate: fail-closed selection rejects all current supervised KNN-regret candidates before final holdout
 zscore all-recent branch: fallback-sensitive
 ```
 
@@ -170,6 +171,13 @@ and 0 validation-positive candidates. Treat this as a transfer-stability
 failure. The next router step should require strict fold-level validation before
 promotion, or move to a calibrated supervised probability model with explicit
 downside constraints.
+
+Latest strict-gate diagnostic: adding `--selection-gate strict` requires zero
+fold metric regressions before final holdout. Both no-series and series-aware
+surfaces return `strict_gate_no_candidate`, `selected_config=null`, and
+`final_holdout_evaluated=false`. Keep this fail-closed gate for supervised
+router promotion; the next model step should improve candidate quality under
+the strict gate instead of relaxing validation.
 
 ## What Counts As Project Failure
 

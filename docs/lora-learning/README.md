@@ -70,3 +70,4 @@ Each note should answer four questions:
 - [057 - Two-Feature Veto And Policy Depth](./057-two-feature-veto-and-policy-depth.md)
 - [058 - Score-Based Router](./058-score-based-router.md)
 - [059 - Supervised Router Transfer](./059-supervised-router-transfer.md)
+- [060 - Fail-Closed Validation Gate](./060-fail-closed-validation-gate.md)
