@@ -70,6 +70,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--min-discovery-vetoed", type=int, default=8)
     parser.add_argument("--max-thresholds-per-feature", type=int, default=96)
     parser.add_argument("--top-rules", type=int, default=20)
+    parser.add_argument(
+        "--selection-objective",
+        choices=["aggregate", "downside-aware", "downside-first"],
+        default="aggregate",
+    )
+    parser.add_argument("--max-discovery-negative-increase", type=int, default=0)
     parser.add_argument("--include-series", action="store_true")
     return parser.parse_args()
 
@@ -311,11 +317,37 @@ def rule_summary(rule: FeatureRule) -> dict[str, Any]:
     }
 
 
+def rule_from_summary(payload: dict[str, Any]) -> FeatureRule:
+    return FeatureRule(
+        feature_name=str(payload["feature_name"]),
+        feature_index=int(payload["feature_index"]),
+        direction=str(payload["direction"]),
+        threshold=float(payload["threshold"]),
+    )
+
+
 def negative_series_count(split: dict[str, Any], section: str) -> int:
     payload = split[section]
     if payload is None:
         return 0
     return int(payload["series_summary"]["negative_routed_series_count"])
+
+
+def series_negative_count(
+    *,
+    rows: list[dict[str, Any]],
+    selected_families: list[str],
+    fallback_family: str,
+    metric: MetricName,
+) -> int:
+    return int(
+        series_delta_summary(
+            rows=rows,
+            selected_families=selected_families,
+            fallback_family=fallback_family,
+            metric=metric,
+        )["negative_routed_series_count"]
+    )
 
 
 def candidate_score(
@@ -366,6 +398,73 @@ def candidate_score(
     }
 
 
+def add_discovery_downside(
+    *,
+    scores: list[dict[str, Any]],
+    rows: list[dict[str, Any]],
+    selected_families: list[str],
+    matrix: list[list[float]],
+    fallback_family: str,
+    metric: MetricName,
+) -> list[dict[str, Any]]:
+    original_negative = series_negative_count(
+        rows=rows,
+        selected_families=selected_families,
+        fallback_family=fallback_family,
+        metric=metric,
+    )
+    enriched: list[dict[str, Any]] = []
+    for score in scores:
+        rule = rule_from_summary(score["rule"])
+        veto_selected, _veto_stats = apply_rule(
+            rows=rows,
+            selected_families=selected_families,
+            matrix=matrix,
+            rule=rule,
+            fallback_family=fallback_family,
+            metric=metric,
+        )
+        veto_negative = series_negative_count(
+            rows=rows,
+            selected_families=veto_selected,
+            fallback_family=fallback_family,
+            metric=metric,
+        )
+        next_score = dict(score)
+        next_score["discovery_downside"] = {
+            "original_negative_series": original_negative,
+            "veto_negative_series": veto_negative,
+            "negative_series_delta": veto_negative - original_negative,
+        }
+        enriched.append(next_score)
+    return enriched
+
+
+def sort_scores(scores: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return sorted(
+        scores,
+        key=lambda item: (
+            float(item["metric_delta"]),
+            int(item["veto"]["harmful_vetoed"]) - int(item["veto"]["beneficial_blocked"]),
+            -int(item["veto"]["changed_windows"]),
+        ),
+        reverse=True,
+    )
+
+
+def sort_downside_first(scores: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return sorted(
+        scores,
+        key=lambda item: (
+            -int(item["discovery_downside"]["negative_series_delta"]),
+            float(item["metric_delta"]),
+            int(item["veto"]["harmful_vetoed"]) - int(item["veto"]["beneficial_blocked"]),
+            -int(item["veto"]["changed_windows"]),
+        ),
+        reverse=True,
+    )
+
+
 def discover_best_rule(
     *,
     rows: list[dict[str, Any]],
@@ -378,7 +477,9 @@ def discover_best_rule(
     min_vetoed: int,
     max_thresholds_per_feature: int,
     top_rules: int,
-) -> tuple[FeatureRule, list[dict[str, Any]]]:
+    selection_objective: str,
+    max_discovery_negative_increase: int,
+) -> tuple[FeatureRule, list[dict[str, Any]], dict[str, Any]]:
     override_indices = [
         index for index, selected_family in enumerate(selected_families) if selected_family != fallback_family
     ]
@@ -427,22 +528,39 @@ def discover_best_rule(
     if not scored:
         raise ValueError("no positive discovery feature-veto rule found")
 
-    scored.sort(
-        key=lambda item: (
-            float(item["metric_delta"]),
-            int(item["veto"]["harmful_vetoed"]) - int(item["veto"]["beneficial_blocked"]),
-            -int(item["veto"]["changed_windows"]),
-        ),
-        reverse=True,
-    )
-    best_rule_payload = scored[0]["rule"]
-    best_rule = FeatureRule(
-        feature_name=str(best_rule_payload["feature_name"]),
-        feature_index=int(best_rule_payload["feature_index"]),
-        direction=str(best_rule_payload["direction"]),
-        threshold=float(best_rule_payload["threshold"]),
-    )
-    return best_rule, scored[:top_rules]
+    aggregate_sorted = sort_scores(scored)
+    candidate_pool = aggregate_sorted
+    if selection_objective in {"downside-aware", "downside-first"}:
+        enriched = add_discovery_downside(
+            scores=aggregate_sorted,
+            rows=rows,
+            selected_families=selected_families,
+            matrix=matrix,
+            fallback_family=fallback_family,
+            metric=metric,
+        )
+        candidate_pool = [
+            score
+            for score in enriched
+            if int(score["discovery_downside"]["negative_series_delta"]) <= max_discovery_negative_increase
+        ]
+        if not candidate_pool:
+            raise ValueError("no downside-aware discovery feature-veto rule found")
+        if selection_objective == "downside-first":
+            candidate_pool = sort_downside_first(candidate_pool)
+        else:
+            candidate_pool = sort_scores(candidate_pool)
+
+    best_rule = rule_from_summary(candidate_pool[0]["rule"])
+    selection_report = {
+        "selection_objective": selection_objective,
+        "positive_discovery_candidate_count": len(scored),
+        "selected_candidate_count": len(candidate_pool),
+        "max_discovery_negative_increase": max_discovery_negative_increase,
+        "aggregate_best_rule": aggregate_sorted[0],
+        "selected_rule": candidate_pool[0],
+    }
+    return best_rule, candidate_pool[:top_rules], selection_report
 
 
 def build_report(args: argparse.Namespace) -> dict[str, Any]:
@@ -495,7 +613,7 @@ def build_report(args: argparse.Namespace) -> dict[str, Any]:
     discovery_matrix = [matrix[index] for index in discovery_indices]
     future_matrix = [matrix[index] for index in future_indices]
 
-    best_rule, top_discovery_rules = discover_best_rule(
+    best_rule, top_discovery_rules, selection_report = discover_best_rule(
         rows=discovery_rows,
         selected_families=discovery_selected,
         matrix=discovery_matrix,
@@ -506,6 +624,8 @@ def build_report(args: argparse.Namespace) -> dict[str, Any]:
         min_vetoed=args.min_discovery_vetoed,
         max_thresholds_per_feature=args.max_thresholds_per_feature,
         top_rules=args.top_rules,
+        selection_objective=args.selection_objective,
+        max_discovery_negative_increase=args.max_discovery_negative_increase,
     )
     discovery_report = split_report(
         name="discovery_through_cut",
@@ -547,11 +667,14 @@ def build_report(args: argparse.Namespace) -> dict[str, Any]:
         "metric": args.metric,
         "fallback_family": args.fallback_family,
         "include_series": args.include_series,
+        "selection_objective": args.selection_objective,
+        "max_discovery_negative_increase": args.max_discovery_negative_increase,
         "discovery_max_cut": args.discovery_max_cut,
         "cuts": cuts,
         "routed_rows": len(routed_rows),
         "feature_count": len(feature_names),
         "best_rule": rule_summary(best_rule),
+        "selection_report": selection_report,
         "top_discovery_rules": top_discovery_rules,
         "discovery_split": discovery_report,
         "future_split": future_report,
@@ -576,6 +699,8 @@ def main() -> None:
                 "output": str(output_path),
                 "verdict": report["verdict"],
                 "include_series": report["include_series"],
+                "selection_objective": report["selection_objective"],
+                "max_discovery_negative_increase": report["max_discovery_negative_increase"],
                 "discovery_max_cut": report["discovery_max_cut"],
                 "best_rule": report["best_rule"],
                 "discovery_changed_windows": report["discovery_split"]["veto"]["changed_windows"],

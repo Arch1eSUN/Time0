@@ -100,6 +100,7 @@ policy-history hard constraint: only all-fallback reaches 0 negative series
 override failure diagnosis: target fallback counterfactual is positive but post-hoc
 target fallback frozen validation: future split has 0 rule exposure
 feature veto frozen validation: aggregate future signal exists, but downside regresses
+downside-aware feature veto: discovery downside control does not transfer to future downside
 zscore all-recent branch: fallback-sensitive
 ```
 
@@ -123,6 +124,13 @@ Latest feature-veto diagnostic: a no-series rule using
 and slightly improves aggregate future MAE, but increases future negative series
 from 1 to 2. This confirms there is no-leak routing signal, while preserving the
 release blocker: future downside control is still not solved.
+
+Latest downside-aware diagnostic: adding discovery-side downside filtering and
+downside-first ranking selects the same `context.past_trend` rule. Discovery
+negative series improve from 3 to 2, but future negative series still regress
+from 1 to 2. Stop escalating single-feature veto rules; the next router step
+needs multi-fold chronological validation or a multi-feature objective that
+jointly optimizes aggregate lift and per-series downside.
 
 ## What Counts As Project Failure
 

@@ -65,3 +65,4 @@ Each note should answer four questions:
 - [052 - Oracle Counterfactuals](./052-oracle-counterfactuals.md)
 - [053 - Frozen Rule Validation](./053-frozen-rule-validation.md)
 - [054 - No-Leak Feature Veto](./054-no-leak-feature-veto.md)
+- [055 - Discovery Downside vs Future Downside](./055-discovery-downside-vs-future-downside.md)
