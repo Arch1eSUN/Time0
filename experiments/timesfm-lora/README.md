@@ -111,6 +111,7 @@ override failure diagnosis: the two negative series are concentrated in 89 cut35
 target fallback frozen validation: freezing the target fallback rule after cut3500 gives 4000 future windows but 0 changed windows, so the rule has no future exposure and remains diagnostic only.
 feature veto frozen validation: a no-series context.past_trend rule has 84 future changed windows and slight aggregate MAE improvement, but worsens future negative series from 1 to 2, so it is signal only, not release-ready.
 downside-aware feature veto: discovery-side downside filtering and downside-first ranking select the same context.past_trend rule; discovery negative series improve 3 -> 2, but future negative series still regress 1 -> 2.
+multi-fold feature veto: chronological validation selects a prediction-context alignment rule that improves final holdout incrementally and keeps negative series 2 -> 2, but remains below fixed recent2000 fallback, so it is not promotion-ready.
 ```
 
 ## Data Contract

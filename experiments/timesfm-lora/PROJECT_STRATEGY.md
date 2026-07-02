@@ -101,6 +101,7 @@ override failure diagnosis: target fallback counterfactual is positive but post-
 target fallback frozen validation: future split has 0 rule exposure
 feature veto frozen validation: aggregate future signal exists, but downside regresses
 downside-aware feature veto: discovery downside control does not transfer to future downside
+multi-fold feature veto: validation gate improves rule selection, but single-feature policy remains below fallback
 zscore all-recent branch: fallback-sensitive
 ```
 
@@ -131,6 +132,13 @@ negative series improve from 3 to 2, but future negative series still regress
 from 1 to 2. Stop escalating single-feature veto rules; the next router step
 needs multi-fold chronological validation or a multi-feature objective that
 jointly optimizes aggregate lift and per-series downside.
+
+Latest multi-fold diagnostic: using `cut<=3500` for discovery, `3750/4000/4250`
+for validation, and `cut>4250` for final holdout selects a
+prediction-context-alignment rule instead of raw `past_trend`. The rule improves
+final holdout incrementally and keeps negative series unchanged at 2, but it is
+still below the fixed `recent2000` fallback. Keep the multi-fold gate and move
+to a richer policy class; single-feature veto is too shallow for release.
 
 ## What Counts As Project Failure
 
