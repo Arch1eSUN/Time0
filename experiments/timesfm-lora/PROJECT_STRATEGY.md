@@ -118,6 +118,7 @@ minimum-exposure logistic gate: sparse strict positives are now blocked; robust 
 worst-fold logistic selection: post-hoc ranking by weakest validation fold improves validation consistency but fails final holdout, so the next lever must enter training or sample weighting
 cut-balanced logistic training: cut-level sample weighting has no validation-selection leverage because discovery has only cut3500; it changes final retraining and worsens holdout
 time-bin logistic training: within-discovery temporal bins affect validation selection but still fail strict promotion and hurt no-series final holdout; one-window include-series positives need a final-exposure gate
+final-exposure logistic gate: final holdout promotion now requires at least 20 changed windows; the include-series one-window positive is downgraded to underexposed, while no-series has enough exposure but negative final delta
 zscore all-recent branch: fallback-sensitive
 ```
 

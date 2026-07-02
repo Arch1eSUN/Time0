@@ -83,3 +83,4 @@ Each note should answer four questions:
 - [070 - Worst-Fold Selection](./070-worst-fold-selection.md)
 - [071 - Cut-Balanced Training](./071-cut-balanced-training.md)
 - [072 - Time-Bin Training](./072-time-bin-training.md)
+- [073 - Final Exposure Gate](./073-final-exposure-gate.md)

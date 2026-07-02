@@ -104,6 +104,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--steps", type=int, default=1200)
     parser.add_argument("--min-validation-changed-windows", type=int, default=1)
     parser.add_argument("--min-validation-fold-changed-windows", type=int, default=1)
+    parser.add_argument("--min-final-changed-windows", type=int, default=1)
     parser.add_argument("--max-validation-fold-no-exposure", type=int, default=0)
     parser.add_argument("--selection-gate", choices=["strict", "robust"], default="strict")
     parser.add_argument("--selection-objective", choices=["combined", "worst-fold"], default="combined")
@@ -127,6 +128,19 @@ def default_threshold_values(requested: list[float] | None) -> list[float]:
         if 0.0 <= value <= 1.0 and value not in values:
             values.append(value)
     return values
+
+
+def final_exposure_pass(final_report: dict[str, Any], min_changed_windows: int) -> bool:
+    return changed_windows(final_report) >= min_changed_windows
+
+
+def verdict_for_final_with_exposure(final_report: dict[str, Any], min_changed_windows: int) -> str:
+    base_verdict = verdict_for_final(final_report)
+    if base_verdict == "not_validated_no_future_exposure":
+        return base_verdict
+    if not final_exposure_pass(final_report, min_changed_windows):
+        return "not_validated_final_underexposed"
+    return base_verdict
 
 
 def default_false_positive_weights(requested: list[float] | None) -> list[float]:
@@ -882,7 +896,12 @@ def build_report(args: argparse.Namespace) -> dict[str, Any]:
             metric=args.metric,
             include_series=args.include_series,
         )
-        verdict = verdict_for_final(final_report)
+        verdict = verdict_for_final_with_exposure(final_report, args.min_final_changed_windows)
+        final_report["min_final_changed_windows"] = args.min_final_changed_windows
+        final_report["final_exposure_pass"] = final_exposure_pass(
+            final_report, args.min_final_changed_windows
+        )
+        final_report["promotion_verdict"] = verdict
 
     return {
         "method": "multifold_logistic_fallback_veto_validation",
@@ -908,6 +927,7 @@ def build_report(args: argparse.Namespace) -> dict[str, Any]:
         "training_target": "fallback_better_probability_with_false_positive_penalty_and_optional_temporal_balance",
         "min_validation_changed_windows": args.min_validation_changed_windows,
         "min_validation_fold_changed_windows": args.min_validation_fold_changed_windows,
+        "min_final_changed_windows": args.min_final_changed_windows,
         "max_validation_fold_no_exposure": args.max_validation_fold_no_exposure,
         "cuts": cuts,
         "routed_rows": len(routed_rows),
@@ -940,8 +960,9 @@ def build_report(args: argparse.Namespace) -> dict[str, Any]:
             "cut- or time-bin-balanced discovery sample weights, selected "
             "on chronological validation folds, and strict mode fails closed before "
             "final holdout when no candidate avoids fold metric/downside regressions "
-            "or the minimum validation exposure gate. Robust diagnostics can rank "
-            "by combined lift or worst-fold validation utility."
+            "or the minimum validation exposure gate. Final holdout promotion also "
+            "requires the configured minimum final exposure. Robust diagnostics can "
+            "rank by combined lift or worst-fold validation utility."
         ),
     }
 
@@ -967,6 +988,7 @@ def main() -> None:
         "selected_config": report["selected_config"],
         "selection_reason": report["selected_validation"]["selection_reason"],
         "final_holdout_evaluated": report["final_holdout_evaluated"],
+        "min_final_changed_windows": report["min_final_changed_windows"],
     }
     final_holdout = report["final_holdout"]
     if final_holdout is not None:
@@ -981,6 +1003,8 @@ def main() -> None:
                 },
                 "final_relative_lift": final_holdout["feature_veto"]["relative_lift_vs_fallback"],
                 "final_verdict": final_holdout["verdict"],
+                "final_exposure_pass": final_holdout["final_exposure_pass"],
+                "final_promotion_verdict": final_holdout["promotion_verdict"],
             }
         )
     print(json.dumps(payload, indent=2))

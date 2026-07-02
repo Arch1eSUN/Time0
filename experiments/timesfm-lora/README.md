@@ -128,6 +128,7 @@ minimum-exposure logistic gate: requiring at least 20 combined validation change
 worst-fold logistic selection: ranking robust candidates by weakest validation fold improves validation shape but reduces final exposure and hurts final holdout; candidate ordering alone does not solve fold-consistency transfer.
 cut-balanced logistic training: balancing discovery examples by cut and label adds useful reporting, but discovery selection only has cut3500 so validation candidates do not move; final retraining changes and hurts holdout, so use within-discovery time bins next.
 time-bin logistic training: splitting discovery cut3500 into three start-index bins gives the training objective real temporal leverage, but no-series final holdout regresses and include-series improves only one final window; keep diagnostics, add a final-exposure gate next.
+final-exposure logistic gate: requiring at least 20 changed final windows downgrades the include-series one-window positive to underexposed; no-series still fails because enough final exposure hurts holdout.
 ```
 
 ## Data Contract
