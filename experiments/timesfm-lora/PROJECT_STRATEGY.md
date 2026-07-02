@@ -99,6 +99,7 @@ series-risk objective: no no-negative policy found
 policy-history hard constraint: only all-fallback reaches 0 negative series
 override failure diagnosis: target fallback counterfactual is positive but post-hoc
 target fallback frozen validation: future split has 0 rule exposure
+feature veto frozen validation: aggregate future signal exists, but downside regresses
 zscore all-recent branch: fallback-sensitive
 ```
 
@@ -116,6 +117,12 @@ post-hoc. It can only become release evidence after freezing the rule or feature
 and validating on a future unseen cut. Freezing the current target fallback rule
 after `cut3500` produced 4000 future windows but 0 changed windows, so this
 specific rule has not been validated; it remains a localization diagnostic.
+
+Latest feature-veto diagnostic: a no-series rule using
+`context.past_trend <= -0.3866836197` has real future exposure after `cut3500`
+and slightly improves aggregate future MAE, but increases future negative series
+from 1 to 2. This confirms there is no-leak routing signal, while preserving the
+release blocker: future downside control is still not solved.
 
 ## What Counts As Project Failure
 

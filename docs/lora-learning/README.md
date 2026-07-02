@@ -64,3 +64,4 @@ Each note should answer four questions:
 - [051 - Hard Constraints And All-Fallback Failure](./051-hard-constraints-and-all-fallback.md)
 - [052 - Oracle Counterfactuals](./052-oracle-counterfactuals.md)
 - [053 - Frozen Rule Validation](./053-frozen-rule-validation.md)
+- [054 - No-Leak Feature Veto](./054-no-leak-feature-veto.md)
