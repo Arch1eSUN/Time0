@@ -80,3 +80,4 @@ Each note should answer four questions:
 - [067 - Compact Features And Regularization](./067-compact-features-and-regularization.md)
 - [068 - False-Positive Penalty](./068-false-positive-penalty.md)
 - [069 - Minimum Exposure Gate](./069-minimum-exposure-gate.md)
+- [070 - Worst-Fold Selection](./070-worst-fold-selection.md)

@@ -98,6 +98,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--min-validation-fold-changed-windows", type=int, default=1)
     parser.add_argument("--max-validation-fold-no-exposure", type=int, default=0)
     parser.add_argument("--selection-gate", choices=["strict", "robust"], default="strict")
+    parser.add_argument("--selection-objective", choices=["combined", "worst-fold"], default="combined")
     parser.add_argument("--include-series", action="store_true")
     return parser.parse_args()
 
@@ -465,8 +466,9 @@ def validation_score(
             )
         )
 
+    fold_metric_deltas = [metric_delta(report) for report in fold_reports]
     fold_negative_regressions = sum(negative_delta(report) > 0 for report in fold_reports)
-    fold_metric_regressions = sum(metric_delta(report) <= 0.0 for report in fold_reports)
+    fold_metric_regressions = sum(delta <= 0.0 for delta in fold_metric_deltas)
     fold_changed_windows = [changed_windows(report) for report in fold_reports]
     fold_no_exposure = sum(changed_windows(report) == 0 for report in fold_reports)
     fold_under_min_exposure = sum(changed < min_fold_changed_windows for changed in fold_changed_windows)
@@ -492,6 +494,11 @@ def validation_score(
             "combined_metric_delta": combined_metric_delta,
             "combined_negative_series_delta": combined_negative_delta,
             "combined_changed_windows": combined_changed_windows,
+            "fold_metric_deltas": fold_metric_deltas,
+            "min_fold_metric_delta": min(fold_metric_deltas) if fold_metric_deltas else 0.0,
+            "mean_fold_metric_delta": float(sum(fold_metric_deltas) / len(fold_metric_deltas))
+            if fold_metric_deltas
+            else 0.0,
             "fold_changed_windows": fold_changed_windows,
             "fold_negative_regressions": fold_negative_regressions,
             "fold_metric_regressions": fold_metric_regressions,
@@ -523,7 +530,29 @@ def strict_validation_positive(score: dict[str, Any]) -> bool:
     )
 
 
-def ranked_validation_scores(scores: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def ranked_validation_scores(
+    scores: list[dict[str, Any]], *, selection_objective: str = "combined"
+) -> list[dict[str, Any]]:
+    if selection_objective == "worst-fold":
+        return sorted(
+            scores,
+            key=lambda score: (
+                strict_validation_positive(score),
+                bool(score["summary"]["robust_pass"]),
+                float(score["summary"]["combined_metric_delta"]) > 0.0,
+                -int(score["summary"]["fold_negative_regressions"]),
+                -int(score["summary"]["combined_negative_series_delta"]),
+                bool(score["summary"].get("exposure_pass", True)),
+                float(score["summary"].get("min_fold_metric_delta", 0.0)),
+                float(score["summary"].get("mean_fold_metric_delta", 0.0)),
+                -int(score["summary"]["fold_metric_regressions"]),
+                float(score["summary"]["combined_metric_delta"]),
+                -int(score["summary"].get("fold_under_min_exposure", 0)),
+                -int(score["summary"]["fold_no_exposure"]),
+                changed_windows(score["combined"]),
+            ),
+            reverse=True,
+        )
     return sorted(
         scores,
         key=lambda score: (
@@ -543,7 +572,9 @@ def ranked_validation_scores(scores: list[dict[str, Any]]) -> list[dict[str, Any
     )
 
 
-def select_validation_config(scores: list[dict[str, Any]], *, selection_gate: str) -> dict[str, Any]:
+def select_validation_config(
+    scores: list[dict[str, Any]], *, selection_gate: str, selection_objective: str
+) -> dict[str, Any]:
     strict_passing = [score for score in scores if strict_validation_positive(score)]
     if selection_gate == "strict":
         if not strict_passing:
@@ -551,7 +582,7 @@ def select_validation_config(scores: list[dict[str, Any]], *, selection_gate: st
                 "selection_reason": "strict_gate_no_candidate",
                 "strict_gate_pass": False,
             }
-        selected = dict(ranked_validation_scores(strict_passing)[0])
+        selected = dict(ranked_validation_scores(strict_passing, selection_objective=selection_objective)[0])
         selected["selection_reason"] = "strict_positive"
         selected["strict_gate_pass"] = True
         return selected
@@ -559,7 +590,7 @@ def select_validation_config(scores: list[dict[str, Any]], *, selection_gate: st
     passing = [score for score in scores if bool(score["summary"]["robust_pass"])]
     validation_positive_scores = [score for score in scores if validation_positive(score)]
     pool = passing or validation_positive_scores or scores
-    selected = dict(ranked_validation_scores(pool)[0])
+    selected = dict(ranked_validation_scores(pool, selection_objective=selection_objective)[0])
     if passing:
         selected["selection_reason"] = "robust_pass"
     elif validation_positive_scores:
@@ -682,7 +713,11 @@ def build_report(args: argparse.Namespace) -> dict[str, Any]:
         )
         for config in configs
     ]
-    selected_validation = select_validation_config(validation_scores, selection_gate=args.selection_gate)
+    selected_validation = select_validation_config(
+        validation_scores,
+        selection_gate=args.selection_gate,
+        selection_objective=args.selection_objective,
+    )
     selected_config: LogisticVetoConfig | None = None
     final_report: dict[str, Any] | None = None
     verdict = "strict_gate_no_candidate"
@@ -711,6 +746,7 @@ def build_report(args: argparse.Namespace) -> dict[str, Any]:
         "fallback_family": args.fallback_family,
         "include_series": args.include_series,
         "selection_gate": args.selection_gate,
+        "selection_objective": args.selection_objective,
         "initial_discovery_max_cut": args.initial_discovery_max_cut,
         "validation_cuts": validation_cuts,
         "final_holdout_min_cut": args.final_holdout_min_cut,
@@ -733,7 +769,7 @@ def build_report(args: argparse.Namespace) -> dict[str, Any]:
         "validation_strict_positive_count": sum(strict_validation_positive(score) for score in validation_scores),
         "validation_score_summaries": [
             compact_validation_score(score)
-            for score in ranked_validation_scores(validation_scores)
+            for score in ranked_validation_scores(validation_scores, selection_objective=args.selection_objective)
         ],
         "selected_validation": selected_validation,
         "selected_config": config_summary(selected_config) if selected_config else None,
@@ -745,7 +781,8 @@ def build_report(args: argparse.Namespace) -> dict[str, Any]:
             "examples with optional extra weight on harmful-veto labels, selected "
             "on chronological validation folds, and strict mode fails closed before "
             "final holdout when no candidate avoids fold metric/downside regressions "
-            "or the minimum validation exposure gate."
+            "or the minimum validation exposure gate. Robust diagnostics can rank "
+            "by combined lift or worst-fold validation utility."
         ),
     }
 
@@ -760,6 +797,7 @@ def main() -> None:
         "output": str(output_path),
         "verdict": report["verdict"],
         "selection_gate": report["selection_gate"],
+        "selection_objective": report["selection_objective"],
         "validation_cuts": report["validation_cuts"],
         "discovery_examples": report["discovery_examples"],
         "final_train_examples": report["final_train_examples"],
