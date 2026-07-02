@@ -112,6 +112,7 @@ utility-aware expected-regret veto: validation utility scoring filters high-lift
 temporal-prefix consensus veto: prefix-model agreement does not reduce fold regressions, so the next lever is failure attribution or new no-leak features
 fold-regression attribution: strict failures localize to specific folds/series/families, and prediction-context alignment features are the next feature-surface lever
 alignment-risk feature surface: raw derived alignment-risk features remain strict-blocked and do not beat base in robust final diagnostics, so the next lever is smaller or more regularized alignment input
+alignment-compact feature surface: compact alignment features and strong L2 both remain strict-blocked; the next lever is an abstention/calibration target rather than more alignment columns
 zscore all-recent branch: fallback-sensitive
 ```
 
@@ -247,6 +248,19 @@ include-series robust final holdout (`+0.0001617361`). Keep
 `--feature-surface alignment-risk` as an experimental seam, not a default; the
 next useful step is compact/regularized alignment features rather than adding
 more raw columns.
+
+Latest compact-alignment diagnostic: compressing the alignment surface from 14
+extra columns to 5 extra columns still produces `0` strict-positive candidates.
+No-series compact improves robust final holdout over raw alignment-risk
+(`+0.0001788929` vs `+0.0001021934`) but remains below base no-series
+(`+0.0002280509`). Include-series compact has more loose validation candidates
+than raw alignment-risk (`11` vs `6`) but weaker robust final holdout
+(`+0.0001521865` vs `+0.0001575894`) and worsens final negative series from
+`1` to `2`. Strong-L2 compact grids collapse useful exposure (`1` robust-pass
+no-series, `0` include-series) and still have `0` strict-positive candidates.
+Stop expanding alignment features in the current expected-regret ridge form.
+The next useful step is an abstention-aware or false-positive-penalized target
+that learns when not to veto cut4000-like windows.
 
 ## What Counts As Project Failure
 

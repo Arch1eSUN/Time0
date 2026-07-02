@@ -112,7 +112,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--min-utility-score", type=float, default=0.0)
     parser.add_argument("--selection-gate", choices=["strict", "robust"], default="strict")
     parser.add_argument("--include-series", action="store_true")
-    parser.add_argument("--feature-surface", choices=["base", "alignment-risk"], default="base")
+    parser.add_argument("--feature-surface", choices=["base", "alignment-risk", "alignment-compact"], default="base")
     return parser.parse_args()
 
 

@@ -77,3 +77,4 @@ Each note should answer four questions:
 - [064 - Consensus Gating](./064-consensus-gating.md)
 - [065 - Fold Regression Attribution](./065-fold-regression-attribution.md)
 - [066 - Alignment-Risk Features](./066-alignment-risk-features.md)
+- [067 - Compact Features And Regularization](./067-compact-features-and-regularization.md)

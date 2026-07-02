@@ -13,6 +13,7 @@ FeatureSurfaceName = str
 
 
 ALIGNMENT_RISK_FEATURE_SURFACE = "alignment-risk"
+ALIGNMENT_COMPACT_FEATURE_SURFACE = "alignment-compact"
 FEATURE_SURFACE_BASE = "base"
 
 ALIGNMENT_RISK_SUFFIXES = (
@@ -273,6 +274,48 @@ def alignment_risk_matrix(
     return np.array(values, dtype=float)
 
 
+def alignment_compact_values(
+    *,
+    row: dict[str, Any],
+    selected_family: str,
+    fallback_family: str,
+) -> list[float]:
+    alignment = row["runtime_features"].get("prediction_context_alignment", {})
+    selected_values = [
+        family_alignment_value(alignment, selected_family, suffix)
+        for suffix in ALIGNMENT_RISK_SUFFIXES
+    ]
+    fallback_values = [
+        family_alignment_value(alignment, fallback_family, suffix)
+        for suffix in ALIGNMENT_RISK_SUFFIXES
+    ]
+
+    return [
+        *(abs(value) for value in selected_values),
+        abs(selected_values[0]) - abs(fallback_values[0]),
+        abs(selected_values[1]) - abs(fallback_values[1]),
+    ]
+
+
+def alignment_compact_matrix(
+    *,
+    rows: list[dict[str, Any]],
+    selected_families: list[str],
+    fallback_family: str,
+) -> np.ndarray:
+    values = [
+        alignment_compact_values(
+            row=row,
+            selected_family=selected_family,
+            fallback_family=fallback_family,
+        )
+        for row, selected_family in zip(rows, selected_families)
+    ]
+    if not values:
+        return np.zeros((0, 5), dtype=float)
+    return np.array(values, dtype=float)
+
+
 def build_veto_matrix(
     *,
     rows: list[dict[str, Any]],
@@ -298,16 +341,22 @@ def build_veto_matrix(
     matrix = np.c_[frame.matrix, family_matrix]
     if feature_surface == FEATURE_SURFACE_BASE:
         return frame, matrix
-    if feature_surface != ALIGNMENT_RISK_FEATURE_SURFACE:
-        raise ValueError(f"unsupported feature surface: {feature_surface}")
-
-    risk_matrix = alignment_risk_matrix(
-        rows=rows,
-        selected_families=selected_families,
-        families=families,
-        fallback_family=fallback_family,
-    )
-    return frame, np.c_[matrix, risk_matrix]
+    if feature_surface == ALIGNMENT_RISK_FEATURE_SURFACE:
+        risk_matrix = alignment_risk_matrix(
+            rows=rows,
+            selected_families=selected_families,
+            families=families,
+            fallback_family=fallback_family,
+        )
+        return frame, np.c_[matrix, risk_matrix]
+    if feature_surface == ALIGNMENT_COMPACT_FEATURE_SURFACE:
+        compact_matrix = alignment_compact_matrix(
+            rows=rows,
+            selected_families=selected_families,
+            fallback_family=fallback_family,
+        )
+        return frame, np.c_[matrix, compact_matrix]
+    raise ValueError(f"unsupported feature surface: {feature_surface}")
 
 
 def feature_surface_summary(feature_surface: FeatureSurfaceName) -> dict[str, Any]:
@@ -316,27 +365,38 @@ def feature_surface_summary(feature_surface: FeatureSurfaceName) -> dict[str, An
             "feature_surface": feature_surface,
             "extra_features": [],
         }
-    if feature_surface != ALIGNMENT_RISK_FEATURE_SURFACE:
-        raise ValueError(f"unsupported feature surface: {feature_surface}")
-    return {
-        "feature_surface": feature_surface,
-        "extra_features": [
-            "selected_abs_predicted_trend_minus_past_trend",
-            "selected_abs_predicted_last_delta_from_past_last_over_std",
-            "selected_abs_predicted_mean_delta_from_past_last_over_std",
-            "fallback_abs_predicted_trend_minus_past_trend",
-            "fallback_abs_predicted_last_delta_from_past_last_over_std",
-            "fallback_abs_predicted_mean_delta_from_past_last_over_std",
-            "selected_minus_fallback_abs_predicted_trend_minus_past_trend",
-            "selected_minus_fallback_abs_predicted_last_delta_from_past_last_over_std",
-            "selected_minus_fallback_abs_predicted_mean_delta_from_past_last_over_std",
-            "family_max_abs_predicted_trend_minus_past_trend",
-            "family_max_abs_predicted_last_delta_from_past_last_over_std",
-            "family_max_abs_predicted_mean_delta_from_past_last_over_std",
-            "selected_predicted_trend_sign_mismatch",
-            "selected_last_delta_direction_mismatch",
-        ],
-    }
+    if feature_surface == ALIGNMENT_RISK_FEATURE_SURFACE:
+        return {
+            "feature_surface": feature_surface,
+            "extra_features": [
+                "selected_abs_predicted_trend_minus_past_trend",
+                "selected_abs_predicted_last_delta_from_past_last_over_std",
+                "selected_abs_predicted_mean_delta_from_past_last_over_std",
+                "fallback_abs_predicted_trend_minus_past_trend",
+                "fallback_abs_predicted_last_delta_from_past_last_over_std",
+                "fallback_abs_predicted_mean_delta_from_past_last_over_std",
+                "selected_minus_fallback_abs_predicted_trend_minus_past_trend",
+                "selected_minus_fallback_abs_predicted_last_delta_from_past_last_over_std",
+                "selected_minus_fallback_abs_predicted_mean_delta_from_past_last_over_std",
+                "family_max_abs_predicted_trend_minus_past_trend",
+                "family_max_abs_predicted_last_delta_from_past_last_over_std",
+                "family_max_abs_predicted_mean_delta_from_past_last_over_std",
+                "selected_predicted_trend_sign_mismatch",
+                "selected_last_delta_direction_mismatch",
+            ],
+        }
+    if feature_surface == ALIGNMENT_COMPACT_FEATURE_SURFACE:
+        return {
+            "feature_surface": feature_surface,
+            "extra_features": [
+                "selected_abs_predicted_trend_minus_past_trend",
+                "selected_abs_predicted_last_delta_from_past_last_over_std",
+                "selected_abs_predicted_mean_delta_from_past_last_over_std",
+                "selected_minus_fallback_abs_predicted_trend_minus_past_trend",
+                "selected_minus_fallback_abs_predicted_last_delta_from_past_last_over_std",
+            ],
+        }
+    raise ValueError(f"unsupported feature surface: {feature_surface}")
 
 
 def apply_neighbor_regret_veto(
