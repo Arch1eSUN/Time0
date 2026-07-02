@@ -85,3 +85,4 @@ Each note should answer four questions:
 - [072 - Time-Bin Training](./072-time-bin-training.md)
 - [073 - Final Exposure Gate](./073-final-exposure-gate.md)
 - [074 - Margin-Weighted Training](./074-margin-weighted-training.md)
+- [075 - Positive-Quantile Abstention](./075-positive-quantile-abstention.md)

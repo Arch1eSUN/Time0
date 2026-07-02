@@ -43,6 +43,8 @@ class LogisticVetoConfig:
     false_positive_weight: float
     training_weighting: str
     training_time_bins: int
+    abstention_mode: str
+    positive_probability_quantile: float
     learning_rate: float
     steps: int
 
@@ -55,10 +57,12 @@ class LogisticVetoModel:
     scale: np.ndarray
     weights: np.ndarray
     bias: float
+    abstention_probability_gate: float | None
     training_examples: int
     training_positive_rate: float
     training_loss: float
     training_brier: float
+    training_probability_summary: dict[str, Any]
 
 
 def parse_args() -> argparse.Namespace:
@@ -106,6 +110,8 @@ def parse_args() -> argparse.Namespace:
         action="append",
     )
     parser.add_argument("--training-time-bins", type=int, default=3)
+    parser.add_argument("--abstention-mode", choices=["none", "positive-quantile"], action="append")
+    parser.add_argument("--positive-probability-quantile", type=float, action="append")
     parser.add_argument("--learning-rate", type=float, default=0.05)
     parser.add_argument("--steps", type=int, default=1200)
     parser.add_argument("--min-validation-changed-windows", type=int, default=1)
@@ -167,6 +173,24 @@ def default_training_weightings(requested: list[str] | None) -> list[str]:
     return values
 
 
+def default_abstention_modes(requested: list[str] | None) -> list[str]:
+    raw_values = requested or ["none"]
+    values: list[str] = []
+    for value in raw_values:
+        if value not in values:
+            values.append(value)
+    return values
+
+
+def default_positive_probability_quantiles(requested: list[float] | None) -> list[float]:
+    raw_values = requested or [0.75]
+    values: list[float] = []
+    for value in raw_values:
+        if 0.0 <= value <= 1.0 and value not in values:
+            values.append(value)
+    return values
+
+
 def example_margin_summary(examples: list[VetoExample]) -> dict[str, Any]:
     if not examples:
         return {
@@ -194,6 +218,8 @@ def config_summary(config: LogisticVetoConfig) -> dict[str, Any]:
         "false_positive_weight": config.false_positive_weight,
         "training_weighting": config.training_weighting,
         "training_time_bins": config.training_time_bins,
+        "abstention_mode": config.abstention_mode,
+        "positive_probability_quantile": config.positive_probability_quantile,
         "learning_rate": config.learning_rate,
         "steps": config.steps,
     }
@@ -206,6 +232,8 @@ def config_from_summary(payload: dict[str, Any]) -> LogisticVetoConfig:
         false_positive_weight=float(payload.get("false_positive_weight", 1.0)),
         training_weighting=str(payload.get("training_weighting", "global-label-balanced")),
         training_time_bins=int(payload.get("training_time_bins", 3)),
+        abstention_mode=str(payload.get("abstention_mode", "none")),
+        positive_probability_quantile=float(payload.get("positive_probability_quantile", 0.75)),
         learning_rate=float(payload["learning_rate"]),
         steps=int(payload["steps"]),
     )
@@ -395,6 +423,42 @@ def brier_score(probabilities: np.ndarray, labels: np.ndarray) -> float:
     return float(((probabilities - labels) ** 2).mean())
 
 
+def probability_distribution_summary(probabilities: np.ndarray, labels: np.ndarray) -> dict[str, Any]:
+    positive_probabilities = probabilities[labels > 0.5]
+    negative_probabilities = probabilities[labels <= 0.5]
+    return {
+        "mean_probability": float(probabilities.mean()) if len(probabilities) else None,
+        "positive_mean_probability": float(positive_probabilities.mean()) if len(positive_probabilities) else None,
+        "negative_mean_probability": float(negative_probabilities.mean()) if len(negative_probabilities) else None,
+        "positive_p50_probability": float(np.quantile(positive_probabilities, 0.5))
+        if len(positive_probabilities)
+        else None,
+        "positive_p75_probability": float(np.quantile(positive_probabilities, 0.75))
+        if len(positive_probabilities)
+        else None,
+        "positive_p90_probability": float(np.quantile(positive_probabilities, 0.9))
+        if len(positive_probabilities)
+        else None,
+        "negative_p90_probability": float(np.quantile(negative_probabilities, 0.9))
+        if len(negative_probabilities)
+        else None,
+    }
+
+
+def abstention_probability_gate(
+    probabilities: np.ndarray, labels: np.ndarray, config: LogisticVetoConfig
+) -> float | None:
+    if config.abstention_mode == "none":
+        return None
+    if config.abstention_mode == "positive-quantile":
+        positive_probabilities = probabilities[labels > 0.5]
+        if len(positive_probabilities) == 0:
+            return 1.0
+        quantile_gate = float(np.quantile(positive_probabilities, config.positive_probability_quantile))
+        return max(config.probability_threshold, quantile_gate)
+    raise ValueError(f"unsupported abstention mode: {config.abstention_mode}")
+
+
 def train_logistic_model(
     *,
     examples: list[VetoExample],
@@ -431,6 +495,7 @@ def train_logistic_model(
         bias -= config.learning_rate * bias_gradient
 
     probabilities = sigmoid(features @ model_weights + bias)
+    abstention_gate = abstention_probability_gate(probabilities, labels, config)
     return LogisticVetoModel(
         config=config,
         frame=frame,
@@ -438,10 +503,12 @@ def train_logistic_model(
         scale=scale,
         weights=model_weights,
         bias=bias,
+        abstention_probability_gate=abstention_gate,
         training_examples=len(examples),
         training_positive_rate=float(labels.mean()),
         training_loss=logistic_loss(probabilities, labels, sample_weights, model_weights, config.l2),
         training_brier=brier_score(probabilities, labels),
+        training_probability_summary=probability_distribution_summary(probabilities, labels),
     )
 
 
@@ -479,6 +546,8 @@ def apply_logistic_veto(
             "mode": "no_current_overrides",
             "changed_windows": 0,
             "training_examples": model.training_examples,
+            "abstention_mode": model.config.abstention_mode,
+            "abstention_probability_gate": model.abstention_probability_gate,
         }
 
     override_rows = [rows[index] for index in override_indices]
@@ -496,10 +565,17 @@ def apply_logistic_veto(
     vetoed_probabilities: list[float] = []
     kept_probabilities: list[float] = []
     vetoed_by_family: dict[str, int] = {}
+    benefit_signal_windows = 0
+    confidence_abstained_windows = 0
     for local_index, probability in enumerate(probabilities):
         global_index = override_indices[local_index]
         selected_family = selected_families[global_index]
         if float(probability) >= model.config.probability_threshold:
+            benefit_signal_windows += 1
+            if model.abstention_probability_gate is not None and float(probability) < model.abstention_probability_gate:
+                confidence_abstained_windows += 1
+                kept_probabilities.append(float(probability))
+                continue
             vetoed[global_index] = fallback_family
             vetoed_probabilities.append(float(probability))
             vetoed_by_family[selected_family] = vetoed_by_family.get(selected_family, 0) + 1
@@ -509,12 +585,18 @@ def apply_logistic_veto(
     return vetoed, {
         "mode": "logistic_fallback_probability_veto",
         "changed_windows": len(vetoed_probabilities),
+        "benefit_signal_windows": benefit_signal_windows,
+        "confidence_abstained_windows": confidence_abstained_windows,
         "training_examples": model.training_examples,
         "training_positive_rate": model.training_positive_rate,
         "training_loss": model.training_loss,
         "training_brier": model.training_brier,
+        "training_probability_summary": model.training_probability_summary,
         "current_overrides": len(override_indices),
         "probability_threshold": model.config.probability_threshold,
+        "abstention_mode": model.config.abstention_mode,
+        "positive_probability_quantile": model.config.positive_probability_quantile,
+        "abstention_probability_gate": model.abstention_probability_gate,
         "mean_probability": float(probabilities.mean()) if len(probabilities) else None,
         "mean_vetoed_probability": sum(vetoed_probabilities) / len(vetoed_probabilities) if vetoed_probabilities else None,
         "mean_kept_probability": sum(kept_probabilities) / len(kept_probabilities) if kept_probabilities else None,
@@ -899,6 +981,8 @@ def build_report(args: argparse.Namespace) -> dict[str, Any]:
             false_positive_weight=false_positive_weight,
             training_weighting=training_weighting,
             training_time_bins=args.training_time_bins,
+            abstention_mode=abstention_mode,
+            positive_probability_quantile=positive_probability_quantile,
             learning_rate=args.learning_rate,
             steps=args.steps,
         )
@@ -906,6 +990,10 @@ def build_report(args: argparse.Namespace) -> dict[str, Any]:
         for threshold in default_threshold_values(args.probability_threshold)
         for false_positive_weight in default_false_positive_weights(args.false_positive_weight)
         for training_weighting in default_training_weightings(args.training_weighting)
+        for abstention_mode in default_abstention_modes(args.abstention_mode)
+        for positive_probability_quantile in default_positive_probability_quantiles(
+            args.positive_probability_quantile
+        )
     ]
     validation_scores = [
         validation_score(
@@ -971,9 +1059,16 @@ def build_report(args: argparse.Namespace) -> dict[str, Any]:
         "false_positive_weights": default_false_positive_weights(args.false_positive_weight),
         "training_weightings": default_training_weightings(args.training_weighting),
         "training_time_bins": args.training_time_bins,
+        "abstention_modes": default_abstention_modes(args.abstention_mode),
+        "positive_probability_quantiles": default_positive_probability_quantiles(
+            args.positive_probability_quantile
+        ),
         "learning_rate": args.learning_rate,
         "steps": args.steps,
-        "training_target": "fallback_better_probability_with_false_positive_penalty_and_optional_temporal_balance",
+        "training_target": (
+            "fallback_better_probability_with_false_positive_penalty_optional_temporal_balance_"
+            "and_optional_training_positive_quantile_abstention"
+        ),
         "min_validation_changed_windows": args.min_validation_changed_windows,
         "min_validation_fold_changed_windows": args.min_validation_fold_changed_windows,
         "min_final_changed_windows": args.min_final_changed_windows,
@@ -1008,12 +1103,14 @@ def build_report(args: argparse.Namespace) -> dict[str, Any]:
         "guardrail": (
             "Logistic fallback-veto probabilities are trained on discovery override "
             "examples with optional extra weight on harmful-veto labels and optional "
-            "cut- or time-bin-balanced discovery sample weights, selected "
-            "on chronological validation folds, and strict mode fails closed before "
-            "final holdout when no candidate avoids fold metric/downside regressions "
-            "or the minimum validation exposure gate. Final holdout promotion also "
-            "requires the configured minimum final exposure. Robust diagnostics can "
-            "rank by combined lift or worst-fold validation utility."
+            "cut- or time-bin-balanced discovery sample weights. Optional abstention "
+            "gates are calibrated from training-split positive probabilities only. "
+            "Candidates are selected on chronological validation folds, and strict "
+            "mode fails closed before final holdout when no candidate avoids fold "
+            "metric/downside regressions or the minimum validation exposure gate. "
+            "Final holdout promotion also requires the configured minimum final "
+            "exposure. Robust diagnostics can rank by combined lift or worst-fold "
+            "validation utility."
         ),
     }
 

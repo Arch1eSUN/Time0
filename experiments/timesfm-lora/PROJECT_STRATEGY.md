@@ -120,6 +120,7 @@ cut-balanced logistic training: cut-level sample weighting has no validation-sel
 time-bin logistic training: within-discovery temporal bins affect validation selection but still fail strict promotion and hurt no-series final holdout; one-window include-series positives need a final-exposure gate
 final-exposure logistic gate: final holdout promotion now requires at least 20 changed windows; the include-series one-window positive is downgraded to underexposed, while no-series has enough exposure but negative final delta
 margin-weighted logistic training: time-bin plus regret-magnitude sample weights reduce validation positives but collapse final holdout exposure to zero, so scalar weighting is no longer the main lever
+positive-quantile abstention gate: a two-stage no-series router gives 81 final changed windows and positive final delta, but still fails strict validation and remains below fallback, so continue with fold-regression repair rather than release
 zscore all-recent branch: fallback-sensitive
 ```
 

@@ -130,6 +130,7 @@ cut-balanced logistic training: balancing discovery examples by cut and label ad
 time-bin logistic training: splitting discovery cut3500 into three start-index bins gives the training objective real temporal leverage, but no-series final holdout regresses and include-series improves only one final window; keep diagnostics, add a final-exposure gate next.
 final-exposure logistic gate: requiring at least 20 changed final windows downgrades the include-series one-window positive to underexposed; no-series still fails because enough final exposure hurts holdout.
 margin-weighted logistic training: weighting discovery examples by bounded regret magnitude suppresses sparse positives, but selected robust candidates collapse to zero final exposure; stop scalar sample-weight tweaks and separate fallback-benefit prediction from abstention.
+positive-quantile abstention gate: separating fallback-benefit prediction from train-calibrated confidence gating gives a no-series partial-positive final diagnostic with 81 changed windows and positive final delta, but strict validation remains blocked by two fold metric regressions.
 ```
 
 ## Data Contract
