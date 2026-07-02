@@ -116,6 +116,7 @@ alignment-compact feature surface: compact alignment features and strong L2 both
 false-positive logistic penalty: cost-sensitive logistic training produces no-series strict-positive candidates, but final holdout fails because exposure is tiny; the next lever is a minimum-exposure promotion gate
 minimum-exposure logistic gate: sparse strict positives are now blocked; robust no-series has enough exposure and slight final lift, but fold direction is inconsistent and final lift remains below fallback
 worst-fold logistic selection: post-hoc ranking by weakest validation fold improves validation consistency but fails final holdout, so the next lever must enter training or sample weighting
+cut-balanced logistic training: cut-level sample weighting has no validation-selection leverage because discovery has only cut3500; it changes final retraining and worsens holdout
 zscore all-recent branch: fallback-sensitive
 ```
 
@@ -302,6 +303,21 @@ changed windows) and turns final metric negative (`-0.0000146476`).
 Include-series remains no-future-exposure. This rejects the hypothesis that
 candidate ordering alone is enough; the next useful lever is
 fold-consistency-aware training or sample weighting.
+
+Latest cut-balanced training diagnostic: adding `--training-weighting
+cut-label-balanced` gives each training cut equal mass and balances labels
+inside each cut, while reports now expose `discovery_example_cut_summary` and
+`final_train_example_cut_summary`. The key structural finding is that validation
+selection trains only on cut3500 (`210` fallback-better, `232`
+selected-better), so cut-level balancing cannot change validation candidates
+(`validation_strict_positive_count=0`). Final retraining does include cuts
+3500/3750/4000/4250, so cut balancing changes the final model, but it hurts:
+combined robust final moves to `53` changed windows with
+`final_metric_delta=-0.0000121668`, and worst-fold robust moves to `15` changed
+windows with `final_metric_delta=-0.0000299353`. Do not promote
+cut-label-balanced weighting. The next no-leak lever is temporal bin balancing
+inside discovery cut3500, not cut-level balancing across unavailable discovery
+cuts.
 
 ## What Counts As Project Failure
 

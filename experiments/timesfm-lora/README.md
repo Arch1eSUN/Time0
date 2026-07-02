@@ -126,6 +126,7 @@ alignment-compact feature surface: compacting alignment features improves no-ser
 false-positive logistic penalty: cost-sensitive logistic training creates the first no-series strict-positive candidates, but the selected policy has tiny validation/final exposure and hurts final holdout; strict validation needs a minimum-exposure gate next.
 minimum-exposure logistic gate: requiring at least 20 combined validation changes and 2 changes per validation fold removes the sparse strict positives; no-series robust improves final slightly with 52 changed windows, but strict promotion remains blocked by two fold metric regressions and below-fallback final lift.
 worst-fold logistic selection: ranking robust candidates by weakest validation fold improves validation shape but reduces final exposure and hurts final holdout; candidate ordering alone does not solve fold-consistency transfer.
+cut-balanced logistic training: balancing discovery examples by cut and label adds useful reporting, but discovery selection only has cut3500 so validation candidates do not move; final retraining changes and hurts holdout, so use within-discovery time bins next.
 ```
 
 ## Data Contract
