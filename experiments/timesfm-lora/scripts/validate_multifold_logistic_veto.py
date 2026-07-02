@@ -119,7 +119,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--min-final-changed-windows", type=int, default=1)
     parser.add_argument("--max-validation-fold-no-exposure", type=int, default=0)
     parser.add_argument("--selection-gate", choices=["strict", "robust"], default="strict")
-    parser.add_argument("--selection-objective", choices=["combined", "worst-fold"], default="combined")
+    parser.add_argument(
+        "--selection-objective",
+        choices=["combined", "worst-fold", "fold-utility"],
+        default="combined",
+    )
     parser.add_argument("--include-series", action="store_true")
     return parser.parse_args()
 
@@ -765,6 +769,8 @@ def validation_score(
     combined_negative_delta = negative_delta(combined_report)
     combined_metric_delta = metric_delta(combined_report)
     combined_changed_windows = changed_windows(combined_report)
+    negative_fold_metric_delta = sum(min(0.0, delta) for delta in fold_metric_deltas)
+    utility_score = combined_metric_delta + negative_fold_metric_delta
     exposure_pass = (
         combined_changed_windows >= min_changed_windows
         and fold_under_min_exposure <= max_fold_no_exposure
@@ -784,6 +790,8 @@ def validation_score(
             "combined_metric_delta": combined_metric_delta,
             "combined_negative_series_delta": combined_negative_delta,
             "combined_changed_windows": combined_changed_windows,
+            "negative_fold_metric_delta": negative_fold_metric_delta,
+            "fold_utility_score": utility_score,
             "fold_metric_deltas": fold_metric_deltas,
             "min_fold_metric_delta": min(fold_metric_deltas) if fold_metric_deltas else 0.0,
             "mean_fold_metric_delta": float(sum(fold_metric_deltas) / len(fold_metric_deltas))
@@ -823,6 +831,26 @@ def strict_validation_positive(score: dict[str, Any]) -> bool:
 def ranked_validation_scores(
     scores: list[dict[str, Any]], *, selection_objective: str = "combined"
 ) -> list[dict[str, Any]]:
+    if selection_objective == "fold-utility":
+        return sorted(
+            scores,
+            key=lambda score: (
+                strict_validation_positive(score),
+                bool(score["summary"]["robust_pass"]),
+                float(score["summary"]["combined_metric_delta"]) > 0.0,
+                -int(score["summary"]["fold_negative_regressions"]),
+                -int(score["summary"]["combined_negative_series_delta"]),
+                bool(score["summary"].get("exposure_pass", True)),
+                -int(score["summary"]["fold_metric_regressions"]),
+                float(score["summary"].get("fold_utility_score", 0.0)),
+                float(score["summary"].get("min_fold_metric_delta", 0.0)),
+                float(score["summary"].get("mean_fold_metric_delta", 0.0)),
+                -int(score["summary"].get("fold_under_min_exposure", 0)),
+                -int(score["summary"]["fold_no_exposure"]),
+                changed_windows(score["combined"]),
+            ),
+            reverse=True,
+        )
     if selection_objective == "worst-fold":
         return sorted(
             scores,
@@ -1109,8 +1137,8 @@ def build_report(args: argparse.Namespace) -> dict[str, Any]:
             "mode fails closed before final holdout when no candidate avoids fold "
             "metric/downside regressions or the minimum validation exposure gate. "
             "Final holdout promotion also requires the configured minimum final "
-            "exposure. Robust diagnostics can rank by combined lift or worst-fold "
-            "validation utility."
+            "exposure. Robust diagnostics can rank by combined lift, worst-fold "
+            "validation utility, or fold-utility scoring."
         ),
     }
 

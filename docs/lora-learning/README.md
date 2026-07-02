@@ -86,3 +86,4 @@ Each note should answer four questions:
 - [073 - Final Exposure Gate](./073-final-exposure-gate.md)
 - [074 - Margin-Weighted Training](./074-margin-weighted-training.md)
 - [075 - Positive-Quantile Abstention](./075-positive-quantile-abstention.md)
+- [076 - Fold-Utility Selection](./076-fold-utility-selection.md)
