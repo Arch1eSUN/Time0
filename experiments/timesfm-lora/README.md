@@ -117,6 +117,7 @@ score-vote veto: voting over discovery-selected single-feature rules expands fin
 supervised KNN-regret veto: no-series supervised routing finds validation-positive candidates but final holdout regresses; series-aware sensitivity improves final slightly but fails validation, so supervised routing remains blocked by transfer stability.
 strict supervised gate: requiring zero fold metric regressions rejects all current supervised KNN-regret candidates and fails closed before final holdout, preserving final evaluation for stronger candidates.
 logistic fallback probability: calibrated probability improves the decision interface and finds loose validation-positive candidates, but strict validation still rejects all configs because fold metric regressions remain.
+expected-regret fallback veto: continuous regret regression finds more aggregate-positive validation candidates, but strict validation still rejects all configs because fold and downside regressions remain.
 ```
 
 ## Data Contract

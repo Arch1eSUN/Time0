@@ -107,6 +107,7 @@ score-vote veto: wider hand-written vote policy improves final holdout, but vali
 supervised KNN-regret veto: learned no-series router passes loose validation but fails final; series-aware sensitivity is final-positive but validation-negative
 strict supervised gate: fail-closed selection rejects all current supervised KNN-regret candidates before final holdout
 logistic fallback probability: calibrated classifier finds loose validation-positive candidates, but strict fold-level gate rejects all configs
+expected-regret fallback veto: continuous regret regression increases loose validation-positive candidates, but strict fold-level and downside gates still reject all configs
 zscore all-recent branch: fallback-sensitive
 ```
 
@@ -189,6 +190,16 @@ mode correctly returns `strict_gate_no_candidate` and does not evaluate final
 holdout. The next step should improve supervision quality, likely expected
 regret or downside-aware utility labels, rather than only swapping classifier
 mechanics.
+
+Latest expected-regret diagnostic: replacing binary fallback probability with
+continuous `regret_vs_fallback` regression increases loose validation-positive
+candidates (`14` no-series, `7` series-aware), but still produces
+`validation_strict_positive_count=0` on both surfaces. High aggregate-lift
+candidates also show fold metric regressions and often negative-series
+regressions, so strict mode correctly returns `strict_gate_no_candidate` and
+does not evaluate final holdout. Keep expected regret as a diagnostic target;
+the next step should rank or train with a utility that explicitly combines
+aggregate lift, fold robustness, exposure, and downside penalty.
 
 ## What Counts As Project Failure
 
