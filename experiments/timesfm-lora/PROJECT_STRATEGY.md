@@ -110,6 +110,7 @@ logistic fallback probability: calibrated classifier finds loose validation-posi
 expected-regret fallback veto: continuous regret regression increases loose validation-positive candidates, but strict fold-level and downside gates still reject all configs
 utility-aware expected-regret veto: validation utility scoring filters high-lift false positives, but no candidate reaches strict fold-level promotion
 temporal-prefix consensus veto: prefix-model agreement does not reduce fold regressions, so the next lever is failure attribution or new no-leak features
+fold-regression attribution: strict failures localize to specific folds/series/families, and prediction-context alignment features are the next feature-surface lever
 zscore all-recent branch: fallback-sensitive
 ```
 
@@ -222,6 +223,17 @@ also remains at `0` strict positives. Stop adding post-hoc gates on the same
 expected-regret surface; the next useful step is fold-regression attribution to
 identify which validation folds, series, families, and no-leak runtime features
 cause the remaining metric regressions.
+
+Latest fold-attribution diagnostic: the no-series selected utility config has
+one regression fold, cut3750 (`metric_delta=-0.0002406373`), concentrated in
+VIXCLS harm (`sum_delta=-0.0780834848`) and vetoes away from `recent3000`
+(`sum_delta=-0.1263973501`). The series-aware config has two regression folds;
+the worst is cut4000 (`metric_delta=-0.0003824223`), dominated by DFF harm
+(`sum_delta=-0.1903805358`) and vetoes away from `recent1500`
+(`sum_delta=-0.1773439093`). Across these failures, harmed and helped windows
+separate strongly on prediction-context alignment features such as
+predicted-trend-minus-past-trend and predicted-last-vs-past-last-over-std. The
+next useful step is an alignment-risk feature experiment, not another gate.
 
 ## What Counts As Project Failure
 

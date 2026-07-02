@@ -120,6 +120,7 @@ logistic fallback probability: calibrated probability improves the decision inte
 expected-regret fallback veto: continuous regret regression finds more aggregate-positive validation candidates, but strict validation still rejects all configs because fold and downside regressions remain.
 utility-aware expected-regret veto: risk-adjusted validation scoring filters loose positives from 14 -> 5 no-series and 7 -> 0 series-aware, while strict validation still blocks final holdout.
 temporal-prefix consensus veto: multiple expected-regret prefix models agree too strongly to filter the remaining fold regressions; strict validation still has 0 candidates.
+fold-regression attribution: no-series failure localizes to cut3750/VIXCLS/recent3000 vetoes; series-aware failure localizes to cut4000/DFF/recent1500 vetoes, with prediction-context alignment features separating harmed from helped windows.
 ```
 
 ## Data Contract
