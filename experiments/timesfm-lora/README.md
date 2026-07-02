@@ -108,6 +108,7 @@ series-downside veto: strict series-level downside control improves router extra
 series-risk objective: ordinary downside penalties keep the 0.319% / 2-negative-series policy; extreme penalties reduce downside mass but lower lift to 0.264% and increase negative series to 3.
 policy-history hard constraint: delayed constraints keep lift but regress to 3 negative series; early constraints reach 0 negative series only by collapsing to all fallback with 0.000% extra lift.
 override failure diagnosis: the two negative series are concentrated in 89 cut3500 override windows; a diagnostic target fallback counterfactual reaches 0.327% lift and 0 negative series, but it is post-hoc and needs future validation before release.
+target fallback frozen validation: freezing the target fallback rule after cut3500 gives 4000 future windows but 0 changed windows, so the rule has no future exposure and remains diagnostic only.
 ```
 
 ## Data Contract

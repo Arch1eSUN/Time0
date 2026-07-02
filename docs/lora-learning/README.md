@@ -63,3 +63,4 @@ Each note should answer four questions:
 - [050 - Series Risk Objective](./050-series-risk-objective.md)
 - [051 - Hard Constraints And All-Fallback Failure](./051-hard-constraints-and-all-fallback.md)
 - [052 - Oracle Counterfactuals](./052-oracle-counterfactuals.md)
+- [053 - Frozen Rule Validation](./053-frozen-rule-validation.md)

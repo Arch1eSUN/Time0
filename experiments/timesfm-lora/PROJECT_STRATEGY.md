@@ -98,6 +98,7 @@ best router negative series: 2 > 0 release gate
 series-risk objective: no no-negative policy found
 policy-history hard constraint: only all-fallback reaches 0 negative series
 override failure diagnosis: target fallback counterfactual is positive but post-hoc
+target fallback frozen validation: future split has 0 rule exposure
 zscore all-recent branch: fallback-sensitive
 ```
 
@@ -112,7 +113,9 @@ Latest diagnostic: the remaining negative series are concentrated in 89 cut3500
 override windows for `BAMLH0A0HYM2` and `DEXJPUS`. A target fallback
 counterfactual clears negative series and raises extra lift to 0.327%, but it is
 post-hoc. It can only become release evidence after freezing the rule or feature
-and validating on a future unseen cut.
+and validating on a future unseen cut. Freezing the current target fallback rule
+after `cut3500` produced 4000 future windows but 0 changed windows, so this
+specific rule has not been validated; it remains a localization diagnostic.
 
 ## What Counts As Project Failure
 
