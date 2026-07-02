@@ -67,3 +67,4 @@ Each note should answer four questions:
 - [054 - No-Leak Feature Veto](./054-no-leak-feature-veto.md)
 - [055 - Discovery Downside vs Future Downside](./055-discovery-downside-vs-future-downside.md)
 - [056 - Multi-Fold Router Validation](./056-multifold-router-validation.md)
+- [057 - Two-Feature Veto And Policy Depth](./057-two-feature-veto-and-policy-depth.md)

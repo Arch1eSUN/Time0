@@ -102,6 +102,7 @@ target fallback frozen validation: future split has 0 rule exposure
 feature veto frozen validation: aggregate future signal exists, but downside regresses
 downside-aware feature veto: discovery downside control does not transfer to future downside
 multi-fold feature veto: validation gate improves rule selection, but single-feature policy remains below fallback
+two-feature veto: deeper hand-written AND policy improves incrementally, but is sparse and still below fallback
 zscore all-recent branch: fallback-sensitive
 ```
 
@@ -139,6 +140,13 @@ prediction-context-alignment rule instead of raw `past_trend`. The rule improves
 final holdout incrementally and keeps negative series unchanged at 2, but it is
 still below the fixed `recent2000` fallback. Keep the multi-fold gate and move
 to a richer policy class; single-feature veto is too shallow for release.
+
+Latest two-feature diagnostic: AND-composed two-feature vetoes improve final
+holdout more than the single-feature rule and keep negative series unchanged,
+but strict multi-fold robust-pass count is 0 because validation exposure is
+sparse. The final policy still remains below fixed fallback. Stop hand-growing
+veto conjunctions; the next policy class should be score-based or supervised
+under the same multi-fold gate.
 
 ## What Counts As Project Failure
 

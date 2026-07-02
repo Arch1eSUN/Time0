@@ -112,6 +112,7 @@ target fallback frozen validation: freezing the target fallback rule after cut35
 feature veto frozen validation: a no-series context.past_trend rule has 84 future changed windows and slight aggregate MAE improvement, but worsens future negative series from 1 to 2, so it is signal only, not release-ready.
 downside-aware feature veto: discovery-side downside filtering and downside-first ranking select the same context.past_trend rule; discovery negative series improve 3 -> 2, but future negative series still regress 1 -> 2.
 multi-fold feature veto: chronological validation selects a prediction-context alignment rule that improves final holdout incrementally and keeps negative series 2 -> 2, but remains below fixed recent2000 fallback, so it is not promotion-ready.
+two-feature veto: AND rules improve final holdout more than single-feature veto and keep negative series 2 -> 2, but strict multi-fold robust pass is 0 and final lift remains below fallback.
 ```
 
 ## Data Contract
