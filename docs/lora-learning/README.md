@@ -62,3 +62,4 @@ Each note should answer four questions:
 - [049 - Series Downside Veto](./049-series-downside-veto.md)
 - [050 - Series Risk Objective](./050-series-risk-objective.md)
 - [051 - Hard Constraints And All-Fallback Failure](./051-hard-constraints-and-all-fallback.md)
+- [052 - Oracle Counterfactuals](./052-oracle-counterfactuals.md)

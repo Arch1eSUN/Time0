@@ -97,6 +97,7 @@ best router extra lift vs fallback: 0.319%
 best router negative series: 2 > 0 release gate
 series-risk objective: no no-negative policy found
 policy-history hard constraint: only all-fallback reaches 0 negative series
+override failure diagnosis: target fallback counterfactual is positive but post-hoc
 zscore all-recent branch: fallback-sensitive
 ```
 
@@ -106,6 +107,12 @@ average lift, per-series downside, or fallback sensitivity. The current
 threshold-veto router family should not be tuned indefinitely because soft risk
 penalties do not satisfy the negative-series gate, while hard policy-history
 constraints satisfy it only by removing all router lift.
+
+Latest diagnostic: the remaining negative series are concentrated in 89 cut3500
+override windows for `BAMLH0A0HYM2` and `DEXJPUS`. A target fallback
+counterfactual clears negative series and raises extra lift to 0.327%, but it is
+post-hoc. It can only become release evidence after freezing the rule or feature
+and validating on a future unseen cut.
 
 ## What Counts As Project Failure
 
