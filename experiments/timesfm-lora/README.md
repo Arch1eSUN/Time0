@@ -118,6 +118,7 @@ supervised KNN-regret veto: no-series supervised routing finds validation-positi
 strict supervised gate: requiring zero fold metric regressions rejects all current supervised KNN-regret candidates and fails closed before final holdout, preserving final evaluation for stronger candidates.
 logistic fallback probability: calibrated probability improves the decision interface and finds loose validation-positive candidates, but strict validation still rejects all configs because fold metric regressions remain.
 expected-regret fallback veto: continuous regret regression finds more aggregate-positive validation candidates, but strict validation still rejects all configs because fold and downside regressions remain.
+utility-aware expected-regret veto: risk-adjusted validation scoring filters loose positives from 14 -> 5 no-series and 7 -> 0 series-aware, while strict validation still blocks final holdout.
 ```
 
 ## Data Contract

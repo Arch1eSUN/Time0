@@ -44,6 +44,15 @@ class ExpectedRegretConfig:
 
 
 @dataclass(frozen=True)
+class UtilityConfig:
+    negative_series_penalty: float
+    fold_negative_penalty: float
+    fold_metric_penalty: float
+    no_exposure_penalty: float
+    min_utility_score: float
+
+
+@dataclass(frozen=True)
 class ExpectedRegretModel:
     config: ExpectedRegretConfig
     frame: FeatureFrame
@@ -92,6 +101,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--regret-threshold", type=float, action="append")
     parser.add_argument("--positive-weight", type=float, action="append")
     parser.add_argument("--max-validation-fold-no-exposure", type=int, default=0)
+    parser.add_argument("--utility-negative-series-penalty", type=float, default=0.001)
+    parser.add_argument("--utility-fold-negative-penalty", type=float, default=0.001)
+    parser.add_argument("--utility-fold-metric-penalty", type=float, default=0.001)
+    parser.add_argument("--utility-no-exposure-penalty", type=float, default=0.001)
+    parser.add_argument("--min-utility-score", type=float, default=0.0)
     parser.add_argument("--selection-gate", choices=["strict", "robust"], default="strict")
     parser.add_argument("--include-series", action="store_true")
     return parser.parse_args()
@@ -139,6 +153,26 @@ def config_from_summary(payload: dict[str, Any]) -> ExpectedRegretConfig:
         regret_threshold=float(payload["regret_threshold"]),
         positive_weight=float(payload["positive_weight"]),
     )
+
+
+def utility_config_from_args(args: argparse.Namespace) -> UtilityConfig:
+    return UtilityConfig(
+        negative_series_penalty=float(args.utility_negative_series_penalty),
+        fold_negative_penalty=float(args.utility_fold_negative_penalty),
+        fold_metric_penalty=float(args.utility_fold_metric_penalty),
+        no_exposure_penalty=float(args.utility_no_exposure_penalty),
+        min_utility_score=float(args.min_utility_score),
+    )
+
+
+def utility_config_summary(config: UtilityConfig) -> dict[str, float]:
+    return {
+        "negative_series_penalty": config.negative_series_penalty,
+        "fold_negative_penalty": config.fold_negative_penalty,
+        "fold_metric_penalty": config.fold_metric_penalty,
+        "no_exposure_penalty": config.no_exposure_penalty,
+        "min_utility_score": config.min_utility_score,
+    }
 
 
 def normalized_matrix(matrix: np.ndarray, mean: np.ndarray, scale: np.ndarray) -> np.ndarray:
@@ -484,6 +518,24 @@ def strict_validation_positive(score: dict[str, Any]) -> bool:
     )
 
 
+def validation_utility_score(score: dict[str, Any], utility_config: UtilityConfig) -> float:
+    summary = score["summary"]
+    return (
+        float(summary["combined_metric_delta"])
+        - utility_config.negative_series_penalty * max(int(summary["combined_negative_series_delta"]), 0)
+        - utility_config.fold_negative_penalty * int(summary["fold_negative_regressions"])
+        - utility_config.fold_metric_penalty * int(summary["fold_metric_regressions"])
+        - utility_config.no_exposure_penalty * int(summary["fold_no_exposure"])
+    )
+
+
+def utility_positive(score: dict[str, Any], utility_config: UtilityConfig) -> bool:
+    return (
+        changed_windows(score["combined"]) > 0
+        and validation_utility_score(score, utility_config) > utility_config.min_utility_score
+    )
+
+
 def ranked_validation_scores(scores: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return sorted(
         scores,
@@ -496,6 +548,23 @@ def ranked_validation_scores(scores: list[dict[str, Any]]) -> list[dict[str, Any
             float(score["summary"]["combined_metric_delta"]),
             -int(score["summary"]["fold_metric_regressions"]),
             -int(score["summary"]["fold_no_exposure"]),
+            changed_windows(score["combined"]),
+        ),
+        reverse=True,
+    )
+
+
+def ranked_utility_scores(scores: list[dict[str, Any]], utility_config: UtilityConfig) -> list[dict[str, Any]]:
+    return sorted(
+        scores,
+        key=lambda score: (
+            utility_positive(score, utility_config),
+            validation_utility_score(score, utility_config),
+            strict_validation_positive(score),
+            bool(score["summary"]["robust_pass"]),
+            -int(score["summary"]["fold_negative_regressions"]),
+            -int(score["summary"]["fold_metric_regressions"]),
+            -int(score["summary"]["combined_negative_series_delta"]),
             changed_windows(score["combined"]),
         ),
         reverse=True,
@@ -529,15 +598,19 @@ def select_validation_config(scores: list[dict[str, Any]], *, selection_gate: st
     return selected
 
 
-def compact_validation_score(score: dict[str, Any]) -> dict[str, Any]:
+def compact_validation_score(score: dict[str, Any], utility_config: UtilityConfig | None = None) -> dict[str, Any]:
     combined = score["combined"]
-    return {
+    compact = {
         "config": score["config"],
         "summary": score["summary"],
         "combined_changed_windows": changed_windows(combined),
         "combined_metric_delta": metric_delta(combined),
         "combined_negative_series_delta": negative_delta(combined),
     }
+    if utility_config is not None:
+        compact["utility_score"] = validation_utility_score(score, utility_config)
+        compact["utility_positive"] = utility_positive(score, utility_config)
+    return compact
 
 
 def build_report(args: argparse.Namespace) -> dict[str, Any]:
@@ -637,6 +710,8 @@ def build_report(args: argparse.Namespace) -> dict[str, Any]:
         )
         for config in configs
     ]
+    utility_config = utility_config_from_args(args)
+    utility_ranked_scores = ranked_utility_scores(validation_scores, utility_config)
     selected_validation = select_validation_config(validation_scores, selection_gate=args.selection_gate)
     selected_config: ExpectedRegretConfig | None = None
     final_report: dict[str, Any] | None = None
@@ -673,6 +748,7 @@ def build_report(args: argparse.Namespace) -> dict[str, Any]:
         "regret_thresholds": default_threshold_values(args.regret_threshold),
         "positive_weights": default_positive_weights(args.positive_weight),
         "max_validation_fold_no_exposure": args.max_validation_fold_no_exposure,
+        "utility_config": utility_config_summary(utility_config),
         "cuts": cuts,
         "routed_rows": len(routed_rows),
         "discovery_examples": len(discovery_examples),
@@ -681,9 +757,17 @@ def build_report(args: argparse.Namespace) -> dict[str, Any]:
         "validation_robust_pass_count": sum(bool(score["summary"]["robust_pass"]) for score in validation_scores),
         "validation_positive_count": sum(validation_positive(score) for score in validation_scores),
         "validation_strict_positive_count": sum(strict_validation_positive(score) for score in validation_scores),
+        "validation_utility_positive_count": sum(utility_positive(score, utility_config) for score in validation_scores),
+        "selected_utility_validation": compact_validation_score(utility_ranked_scores[0], utility_config),
+        "selected_utility_config": utility_ranked_scores[0]["config"],
+        "selected_utility_score": validation_utility_score(utility_ranked_scores[0], utility_config),
         "validation_score_summaries": [
-            compact_validation_score(score)
+            compact_validation_score(score, utility_config)
             for score in ranked_validation_scores(validation_scores)
+        ],
+        "validation_utility_score_summaries": [
+            compact_validation_score(score, utility_config)
+            for score in utility_ranked_scores
         ],
         "selected_validation": selected_validation,
         "selected_config": config_summary(selected_config) if selected_config else None,
@@ -715,6 +799,9 @@ def main() -> None:
         "validation_robust_pass_count": report["validation_robust_pass_count"],
         "validation_positive_count": report["validation_positive_count"],
         "validation_strict_positive_count": report["validation_strict_positive_count"],
+        "validation_utility_positive_count": report["validation_utility_positive_count"],
+        "selected_utility_config": report["selected_utility_config"],
+        "selected_utility_score": report["selected_utility_score"],
         "selected_config": report["selected_config"],
         "selection_reason": report["selected_validation"]["selection_reason"],
         "final_holdout_evaluated": report["final_holdout_evaluated"],

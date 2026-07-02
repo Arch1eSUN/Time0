@@ -73,3 +73,4 @@ Each note should answer four questions:
 - [060 - Fail-Closed Validation Gate](./060-fail-closed-validation-gate.md)
 - [061 - Calibrated Fallback Probability](./061-calibrated-fallback-probability.md)
 - [062 - Expected Regret Target](./062-expected-regret-target.md)
+- [063 - Utility-Aware Selection](./063-utility-aware-selection.md)

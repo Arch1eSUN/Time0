@@ -108,6 +108,7 @@ supervised KNN-regret veto: learned no-series router passes loose validation but
 strict supervised gate: fail-closed selection rejects all current supervised KNN-regret candidates before final holdout
 logistic fallback probability: calibrated classifier finds loose validation-positive candidates, but strict fold-level gate rejects all configs
 expected-regret fallback veto: continuous regret regression increases loose validation-positive candidates, but strict fold-level and downside gates still reject all configs
+utility-aware expected-regret veto: validation utility scoring filters high-lift false positives, but no candidate reaches strict fold-level promotion
 zscore all-recent branch: fallback-sensitive
 ```
 
@@ -200,6 +201,16 @@ regressions, so strict mode correctly returns `strict_gate_no_candidate` and
 does not evaluate final holdout. Keep expected regret as a diagnostic target;
 the next step should rank or train with a utility that explicitly combines
 aggregate lift, fold robustness, exposure, and downside penalty.
+
+Latest utility-regret diagnostic: adding validation utility scoring to the
+expected-regret surface filters loose candidates from `14 -> 5` on no-series
+and `7 -> 0` on series-aware. The raw highest-lift no-series candidate has
+`combined_metric_delta=0.0014757435` but utility score `-0.0035242565` after
+negative-series, fold-metric, and fold-downside penalties. The best utility
+candidate is cleaner but still has one fold metric regression, so strict mode
+again returns `strict_gate_no_candidate` and keeps final holdout untouched.
+This confirms utility scoring is useful as a diagnostic, but the blocker is
+still generating candidates with zero fold metric regressions.
 
 ## What Counts As Project Failure
 
