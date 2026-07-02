@@ -117,6 +117,7 @@ false-positive logistic penalty: cost-sensitive logistic training produces no-se
 minimum-exposure logistic gate: sparse strict positives are now blocked; robust no-series has enough exposure and slight final lift, but fold direction is inconsistent and final lift remains below fallback
 worst-fold logistic selection: post-hoc ranking by weakest validation fold improves validation consistency but fails final holdout, so the next lever must enter training or sample weighting
 cut-balanced logistic training: cut-level sample weighting has no validation-selection leverage because discovery has only cut3500; it changes final retraining and worsens holdout
+time-bin logistic training: within-discovery temporal bins affect validation selection but still fail strict promotion and hurt no-series final holdout; one-window include-series positives need a final-exposure gate
 zscore all-recent branch: fallback-sensitive
 ```
 
@@ -318,6 +319,19 @@ windows with `final_metric_delta=-0.0000299353`. Do not promote
 cut-label-balanced weighting. The next no-leak lever is temporal bin balancing
 inside discovery cut3500, not cut-level balancing across unavailable discovery
 cuts.
+
+Latest time-bin training diagnostic: adding `--training-weighting
+time-bin-label-balanced --training-time-bins 3` splits each training cut by
+`start_index` before balancing labels. Discovery cut3500 has real temporal
+structure: bin0 `47/105` fallback/selected, bin1 `73/72`, bin2 `90/55`, so the
+objective has actual leverage. It changes validation selection (`robust_pass`
+no-series `5 -> 4`) but still yields `validation_strict_positive_count=0`.
+No-series robust selects `l2=0.1`, `probability_threshold=0.55`,
+`false_positive_weight=1.0`, changes `54` final windows, and regresses
+(`final_metric_delta=-0.0000143517`). Include-series robust is technically
+positive but changes only `1` final window (`+0.0000001652`) and remains below
+fallback. Do not promote time-bin weighting. Add a minimum final-exposure gate
+before treating any tiny final positive as meaningful.
 
 ## What Counts As Project Failure
 

@@ -82,3 +82,4 @@ Each note should answer four questions:
 - [069 - Minimum Exposure Gate](./069-minimum-exposure-gate.md)
 - [070 - Worst-Fold Selection](./070-worst-fold-selection.md)
 - [071 - Cut-Balanced Training](./071-cut-balanced-training.md)
+- [072 - Time-Bin Training](./072-time-bin-training.md)

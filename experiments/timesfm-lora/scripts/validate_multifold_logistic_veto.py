@@ -42,6 +42,7 @@ class LogisticVetoConfig:
     probability_threshold: float
     false_positive_weight: float
     training_weighting: str
+    training_time_bins: int
     learning_rate: float
     steps: int
 
@@ -95,9 +96,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--false-positive-weight", type=float, action="append")
     parser.add_argument(
         "--training-weighting",
-        choices=["global-label-balanced", "cut-label-balanced"],
+        choices=["global-label-balanced", "cut-label-balanced", "time-bin-label-balanced"],
         action="append",
     )
+    parser.add_argument("--training-time-bins", type=int, default=3)
     parser.add_argument("--learning-rate", type=float, default=0.05)
     parser.add_argument("--steps", type=int, default=1200)
     parser.add_argument("--min-validation-changed-windows", type=int, default=1)
@@ -152,6 +154,7 @@ def config_summary(config: LogisticVetoConfig) -> dict[str, Any]:
         "probability_threshold": config.probability_threshold,
         "false_positive_weight": config.false_positive_weight,
         "training_weighting": config.training_weighting,
+        "training_time_bins": config.training_time_bins,
         "learning_rate": config.learning_rate,
         "steps": config.steps,
     }
@@ -163,6 +166,7 @@ def config_from_summary(payload: dict[str, Any]) -> LogisticVetoConfig:
         probability_threshold=float(payload["probability_threshold"]),
         false_positive_weight=float(payload.get("false_positive_weight", 1.0)),
         training_weighting=str(payload.get("training_weighting", "global-label-balanced")),
+        training_time_bins=int(payload.get("training_time_bins", 3)),
         learning_rate=float(payload["learning_rate"]),
         steps=int(payload["steps"]),
     )
@@ -180,6 +184,12 @@ def labels_from_examples(examples: list[VetoExample]) -> np.ndarray:
     return np.array([1.0 if example.regret_vs_fallback > 0.0 else 0.0 for example in examples], dtype=float)
 
 
+def example_start_index(example: VetoExample) -> int:
+    if "start_index" in example.row:
+        return int(example.row["start_index"])
+    return int(example.row["runtime_features"]["start_index"])
+
+
 def example_cut_label_summary(examples: list[VetoExample]) -> dict[str, Any]:
     summary: dict[str, dict[str, int]] = {}
     for example in examples:
@@ -189,6 +199,61 @@ def example_cut_label_summary(examples: list[VetoExample]) -> dict[str, Any]:
             summary[cut] = {"fallback_better": 0, "selected_better": 0}
         summary[cut][label_name] += 1
     return dict(sorted(summary.items(), key=lambda item: int(item[0])))
+
+
+def time_bin_assignments(examples: list[VetoExample], bin_count: int) -> list[tuple[int, int]]:
+    effective_bin_count = max(1, bin_count)
+    cut_start_indices: dict[int, list[int]] = {}
+    for example in examples:
+        cut = int(example.row["cut"])
+        cut_start_indices.setdefault(cut, []).append(example_start_index(example))
+
+    cut_rank_maps: dict[int, dict[int, int]] = {}
+    for cut, start_indices in cut_start_indices.items():
+        unique_start_indices = sorted(set(start_indices))
+        cut_rank_maps[cut] = {start_index: rank for rank, start_index in enumerate(unique_start_indices)}
+
+    assignments: list[tuple[int, int]] = []
+    for example in examples:
+        cut = int(example.row["cut"])
+        rank_map = cut_rank_maps[cut]
+        unique_count = len(rank_map)
+        if unique_count <= 1:
+            time_bin = 0
+        else:
+            rank = rank_map[example_start_index(example)]
+            time_bin = min(effective_bin_count - 1, (rank * effective_bin_count) // unique_count)
+        assignments.append((cut, time_bin))
+    return assignments
+
+
+def example_time_bin_label_summary(examples: list[VetoExample], bin_count: int) -> dict[str, Any]:
+    summary: dict[str, dict[str, dict[str, int | None]]] = {}
+    assignments = time_bin_assignments(examples, bin_count)
+    for example, (cut, time_bin) in zip(examples, assignments):
+        cut_key = str(cut)
+        bin_key = str(time_bin)
+        label_name = "fallback_better" if example.regret_vs_fallback > 0.0 else "selected_better"
+        start_index = example_start_index(example)
+        if cut_key not in summary:
+            summary[cut_key] = {}
+        if bin_key not in summary[cut_key]:
+            summary[cut_key][bin_key] = {
+                "fallback_better": 0,
+                "selected_better": 0,
+                "start_index_min": None,
+                "start_index_max": None,
+            }
+        bucket = summary[cut_key][bin_key]
+        bucket[label_name] = int(bucket[label_name]) + 1
+        current_min = bucket["start_index_min"]
+        current_max = bucket["start_index_max"]
+        bucket["start_index_min"] = start_index if current_min is None else min(int(current_min), start_index)
+        bucket["start_index_max"] = start_index if current_max is None else max(int(current_max), start_index)
+    return {
+        cut: dict(sorted(bins.items(), key=lambda item: int(item[0])))
+        for cut, bins in sorted(summary.items(), key=lambda item: int(item[0]))
+    }
 
 
 def balanced_sample_weights(labels: np.ndarray) -> np.ndarray:
@@ -206,30 +271,39 @@ def false_positive_sample_weights(labels: np.ndarray, false_positive_weight: flo
 
 
 def cut_label_balanced_sample_weights(examples: list[VetoExample], labels: np.ndarray) -> np.ndarray:
+    groups = [(int(example.row["cut"]),) for example in examples]
+    return group_label_balanced_sample_weights(groups, labels)
+
+
+def time_bin_label_balanced_sample_weights(examples: list[VetoExample], labels: np.ndarray, bin_count: int) -> np.ndarray:
+    return group_label_balanced_sample_weights(time_bin_assignments(examples, bin_count), labels)
+
+
+def group_label_balanced_sample_weights(groups: list[tuple[int, ...]], labels: np.ndarray) -> np.ndarray:
     weights = np.zeros_like(labels)
-    cuts = sorted({int(example.row["cut"]) for example in examples})
-    if not cuts:
+    unique_groups = sorted(set(groups))
+    if not unique_groups:
         return np.ones_like(labels)
-    cut_mass = 1.0 / len(cuts)
-    for cut in cuts:
-        cut_indices = [index for index, example in enumerate(examples) if int(example.row["cut"]) == cut]
-        positive_indices = [index for index in cut_indices if labels[index] > 0.5]
-        negative_indices = [index for index in cut_indices if labels[index] <= 0.5]
+    group_mass = 1.0 / len(unique_groups)
+    for group in unique_groups:
+        group_indices = [index for index, candidate_group in enumerate(groups) if candidate_group == group]
+        positive_indices = [index for index in group_indices if labels[index] > 0.5]
+        negative_indices = [index for index in group_indices if labels[index] <= 0.5]
         if positive_indices and negative_indices:
-            positive_mass = cut_mass * 0.5
-            negative_mass = cut_mass * 0.5
+            positive_mass = group_mass * 0.5
+            negative_mass = group_mass * 0.5
         elif positive_indices:
-            positive_mass = cut_mass
+            positive_mass = group_mass
             negative_mass = 0.0
         else:
             positive_mass = 0.0
-            negative_mass = cut_mass
+            negative_mass = group_mass
         for index in positive_indices:
             weights[index] = positive_mass / len(positive_indices)
         for index in negative_indices:
             weights[index] = negative_mass / len(negative_indices)
-        if cut_indices and weights[cut_indices].sum() == 0.0:
-            weights[cut_indices] = cut_mass / len(cut_indices)
+        if group_indices and weights[group_indices].sum() == 0.0:
+            weights[group_indices] = group_mass / len(group_indices)
     mean_weight = float(weights.mean())
     if mean_weight <= 0.0:
         return np.ones_like(labels)
@@ -239,6 +313,9 @@ def cut_label_balanced_sample_weights(examples: list[VetoExample], labels: np.nd
 def sample_weights_for_examples(
     examples: list[VetoExample], labels: np.ndarray, config: LogisticVetoConfig
 ) -> np.ndarray:
+    if config.training_weighting == "time-bin-label-balanced":
+        balanced_weights = time_bin_label_balanced_sample_weights(examples, labels, config.training_time_bins)
+        return np.where(labels > 0.5, balanced_weights, balanced_weights * config.false_positive_weight)
     if config.training_weighting == "cut-label-balanced":
         balanced_weights = cut_label_balanced_sample_weights(examples, labels)
         return np.where(labels > 0.5, balanced_weights, balanced_weights * config.false_positive_weight)
@@ -758,6 +835,7 @@ def build_report(args: argparse.Namespace) -> dict[str, Any]:
             probability_threshold=threshold,
             false_positive_weight=false_positive_weight,
             training_weighting=training_weighting,
+            training_time_bins=args.training_time_bins,
             learning_rate=args.learning_rate,
             steps=args.steps,
         )
@@ -824,9 +902,10 @@ def build_report(args: argparse.Namespace) -> dict[str, Any]:
         "probability_thresholds": default_threshold_values(args.probability_threshold),
         "false_positive_weights": default_false_positive_weights(args.false_positive_weight),
         "training_weightings": default_training_weightings(args.training_weighting),
+        "training_time_bins": args.training_time_bins,
         "learning_rate": args.learning_rate,
         "steps": args.steps,
-        "training_target": "fallback_better_probability_with_false_positive_penalty_and_optional_cut_balance",
+        "training_target": "fallback_better_probability_with_false_positive_penalty_and_optional_temporal_balance",
         "min_validation_changed_windows": args.min_validation_changed_windows,
         "min_validation_fold_changed_windows": args.min_validation_fold_changed_windows,
         "max_validation_fold_no_exposure": args.max_validation_fold_no_exposure,
@@ -834,8 +913,14 @@ def build_report(args: argparse.Namespace) -> dict[str, Any]:
         "routed_rows": len(routed_rows),
         "discovery_examples": len(discovery_examples),
         "discovery_example_cut_summary": example_cut_label_summary(discovery_examples),
+        "discovery_example_time_bin_summary": example_time_bin_label_summary(
+            discovery_examples, args.training_time_bins
+        ),
         "final_train_examples": len(final_train_examples),
         "final_train_example_cut_summary": example_cut_label_summary(final_train_examples),
+        "final_train_example_time_bin_summary": example_time_bin_label_summary(
+            final_train_examples, args.training_time_bins
+        ),
         "validation_candidate_count": len(validation_scores),
         "validation_robust_pass_count": sum(bool(score["summary"]["robust_pass"]) for score in validation_scores),
         "validation_positive_count": sum(validation_positive(score) for score in validation_scores),
@@ -852,7 +937,7 @@ def build_report(args: argparse.Namespace) -> dict[str, Any]:
         "guardrail": (
             "Logistic fallback-veto probabilities are trained on discovery override "
             "examples with optional extra weight on harmful-veto labels and optional "
-            "cut-balanced discovery sample weights, selected "
+            "cut- or time-bin-balanced discovery sample weights, selected "
             "on chronological validation folds, and strict mode fails closed before "
             "final holdout when no candidate avoids fold metric/downside regressions "
             "or the minimum validation exposure gate. Robust diagnostics can rank "
