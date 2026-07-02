@@ -74,3 +74,4 @@ Each note should answer four questions:
 - [061 - Calibrated Fallback Probability](./061-calibrated-fallback-probability.md)
 - [062 - Expected Regret Target](./062-expected-regret-target.md)
 - [063 - Utility-Aware Selection](./063-utility-aware-selection.md)
+- [064 - Consensus Gating](./064-consensus-gating.md)

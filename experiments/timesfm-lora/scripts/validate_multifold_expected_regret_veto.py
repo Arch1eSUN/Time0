@@ -41,6 +41,7 @@ class ExpectedRegretConfig:
     l2: float
     regret_threshold: float
     positive_weight: float
+    consensus_min_models: int
 
 
 @dataclass(frozen=True)
@@ -100,6 +101,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--l2", type=float, action="append")
     parser.add_argument("--regret-threshold", type=float, action="append")
     parser.add_argument("--positive-weight", type=float, action="append")
+    parser.add_argument("--consensus-min-models", type=int, action="append")
+    parser.add_argument("--consensus-mode", choices=["single", "temporal-prefix"], default="single")
     parser.add_argument("--max-validation-fold-no-exposure", type=int, default=0)
     parser.add_argument("--utility-negative-series-penalty", type=float, default=0.001)
     parser.add_argument("--utility-fold-negative-penalty", type=float, default=0.001)
@@ -138,12 +141,22 @@ def default_positive_weights(requested: list[float] | None) -> list[float]:
     return values
 
 
+def default_consensus_min_models(requested: list[int] | None) -> list[int]:
+    raw_values = requested or [1]
+    values: list[int] = []
+    for value in raw_values:
+        if value > 0 and value not in values:
+            values.append(value)
+    return values
+
+
 def config_summary(config: ExpectedRegretConfig) -> dict[str, Any]:
     return {
         "model": "expected_regret_ridge_veto",
         "l2": config.l2,
         "regret_threshold": config.regret_threshold,
         "positive_weight": config.positive_weight,
+        "consensus_min_models": config.consensus_min_models,
     }
 
 
@@ -152,6 +165,7 @@ def config_from_summary(payload: dict[str, Any]) -> ExpectedRegretConfig:
         l2=float(payload["l2"]),
         regret_threshold=float(payload["regret_threshold"]),
         positive_weight=float(payload["positive_weight"]),
+        consensus_min_models=int(payload.get("consensus_min_models", 1)),
     )
 
 
@@ -245,6 +259,40 @@ def train_expected_regret_model(
     )
 
 
+def training_example_partitions(examples: list[VetoExample], *, consensus_mode: str) -> list[list[VetoExample]]:
+    if consensus_mode == "single":
+        return [examples]
+    if consensus_mode != "temporal-prefix":
+        raise ValueError(f"unsupported consensus mode: {consensus_mode}")
+
+    cuts = sorted({int(example.row["cut"]) for example in examples})
+    partitions: list[list[VetoExample]] = []
+    for cut in cuts:
+        partition = [example for example in examples if int(example.row["cut"]) <= cut]
+        if partition:
+            partitions.append(partition)
+    return partitions or [examples]
+
+
+def train_expected_regret_models(
+    *,
+    examples: list[VetoExample],
+    families: list[str],
+    include_series: bool,
+    config: ExpectedRegretConfig,
+    consensus_mode: str,
+) -> list[ExpectedRegretModel]:
+    return [
+        train_expected_regret_model(
+            examples=partition,
+            families=families,
+            include_series=include_series,
+            config=config,
+        )
+        for partition in training_example_partitions(examples, consensus_mode=consensus_mode)
+    ]
+
+
 def fixed_fallback_metric(
     *,
     rows: list[dict[str, Any]],
@@ -266,11 +314,16 @@ def apply_expected_regret_veto(
     *,
     rows: list[dict[str, Any]],
     selected_families: list[str],
-    model: ExpectedRegretModel,
+    models: list[ExpectedRegretModel],
     families: list[str],
     fallback_family: str,
     include_series: bool,
+    consensus_mode: str,
 ) -> tuple[list[str], dict[str, Any]]:
+    if not models:
+        raise ValueError("cannot apply expected-regret veto without trained models")
+    reference_model = models[-1]
+    consensus_min_models = min(reference_model.config.consensus_min_models, len(models))
     override_indices = [
         index for index, selected_family in enumerate(selected_families) if selected_family != fallback_family
     ]
@@ -278,47 +331,68 @@ def apply_expected_regret_veto(
         return selected_families, {
             "mode": "no_current_overrides",
             "changed_windows": 0,
-            "training_examples": model.training_examples,
+            "training_examples": reference_model.training_examples,
+            "consensus_mode": consensus_mode,
+            "consensus_models": len(models),
+            "consensus_min_models": reference_model.config.consensus_min_models,
+            "effective_consensus_min_models": consensus_min_models,
         }
 
     override_rows = [rows[index] for index in override_indices]
     override_families = [selected_families[index] for index in override_indices]
-    _eval_frame, matrix = build_veto_matrix(
-        rows=override_rows,
-        selected_families=override_families,
-        families=families,
-        include_series=include_series,
-        reference=model.frame,
-    )
-    features = normalized_matrix(matrix, model.mean, model.scale)
-    predicted_regret = features @ model.weights + model.bias
+    model_predictions: list[np.ndarray] = []
+    for model in models:
+        _eval_frame, matrix = build_veto_matrix(
+            rows=override_rows,
+            selected_families=override_families,
+            families=families,
+            include_series=include_series,
+            reference=model.frame,
+        )
+        features = normalized_matrix(matrix, model.mean, model.scale)
+        model_predictions.append(features @ model.weights + model.bias)
+    prediction_matrix = np.vstack(model_predictions)
+    regret_votes = prediction_matrix >= reference_model.config.regret_threshold
+    vote_counts = regret_votes.sum(axis=0)
+    mean_predicted_regret = prediction_matrix.mean(axis=0)
     vetoed = list(selected_families)
     vetoed_scores: list[float] = []
     kept_scores: list[float] = []
+    vetoed_vote_counts: list[int] = []
+    kept_vote_counts: list[int] = []
     vetoed_by_family: dict[str, int] = {}
-    for local_index, score in enumerate(predicted_regret):
+    for local_index, score in enumerate(mean_predicted_regret):
         global_index = override_indices[local_index]
         selected_family = selected_families[global_index]
-        if float(score) >= model.config.regret_threshold:
+        vote_count = int(vote_counts[local_index])
+        if vote_count >= consensus_min_models:
             vetoed[global_index] = fallback_family
             vetoed_scores.append(float(score))
+            vetoed_vote_counts.append(vote_count)
             vetoed_by_family[selected_family] = vetoed_by_family.get(selected_family, 0) + 1
         else:
             kept_scores.append(float(score))
+            kept_vote_counts.append(vote_count)
 
     return vetoed, {
         "mode": "expected_regret_ridge_veto",
         "changed_windows": len(vetoed_scores),
-        "training_examples": model.training_examples,
-        "training_positive_rate": model.training_positive_rate,
-        "training_target_mean": model.training_target_mean,
-        "training_target_mae": model.training_target_mae,
-        "training_target_rmse": model.training_target_rmse,
+        "training_examples": reference_model.training_examples,
+        "training_positive_rate": reference_model.training_positive_rate,
+        "training_target_mean": reference_model.training_target_mean,
+        "training_target_mae": reference_model.training_target_mae,
+        "training_target_rmse": reference_model.training_target_rmse,
+        "consensus_mode": consensus_mode,
+        "consensus_models": len(models),
+        "consensus_min_models": reference_model.config.consensus_min_models,
+        "effective_consensus_min_models": consensus_min_models,
         "current_overrides": len(override_indices),
-        "regret_threshold": model.config.regret_threshold,
-        "mean_predicted_regret": float(predicted_regret.mean()) if len(predicted_regret) else None,
+        "regret_threshold": reference_model.config.regret_threshold,
+        "mean_predicted_regret": float(mean_predicted_regret.mean()) if len(mean_predicted_regret) else None,
         "mean_vetoed_predicted_regret": sum(vetoed_scores) / len(vetoed_scores) if vetoed_scores else None,
         "mean_kept_predicted_regret": sum(kept_scores) / len(kept_scores) if kept_scores else None,
+        "mean_vetoed_consensus_votes": sum(vetoed_vote_counts) / len(vetoed_vote_counts) if vetoed_vote_counts else None,
+        "mean_kept_consensus_votes": sum(kept_vote_counts) / len(kept_vote_counts) if kept_vote_counts else None,
         "vetoed_by_family": dict(sorted(vetoed_by_family.items())),
     }
 
@@ -334,6 +408,7 @@ def expected_regret_split_report(
     fallback_family: str,
     metric: MetricName,
     include_series: bool,
+    consensus_mode: str,
 ) -> dict[str, Any]:
     if not rows:
         return {
@@ -361,19 +436,21 @@ def expected_regret_split_report(
         families=families,
         metric=metric,
     )
-    model = train_expected_regret_model(
+    models = train_expected_regret_models(
         examples=training_examples,
         families=families,
         include_series=include_series,
         config=config,
+        consensus_mode=consensus_mode,
     )
     veto_selected, veto_stats = apply_expected_regret_veto(
         rows=rows,
         selected_families=selected_families,
-        model=model,
+        models=models,
         families=families,
         fallback_family=fallback_family,
         include_series=include_series,
+        consensus_mode=consensus_mode,
     )
     veto_metrics = selection_metrics(
         rows=rows,
@@ -437,6 +514,7 @@ def validation_score(
     fallback_family: str,
     metric: MetricName,
     include_series: bool,
+    consensus_mode: str,
     max_fold_no_exposure: int,
 ) -> dict[str, Any]:
     combined_report = expected_regret_split_report(
@@ -449,6 +527,7 @@ def validation_score(
         fallback_family=fallback_family,
         metric=metric,
         include_series=include_series,
+        consensus_mode=consensus_mode,
     )
     fold_reports: list[dict[str, Any]] = []
     placeholder_matrix = [[] for _row in validation_rows]
@@ -470,6 +549,7 @@ def validation_score(
                 fallback_family=fallback_family,
                 metric=metric,
                 include_series=include_series,
+                consensus_mode=consensus_mode,
             )
         )
 
@@ -690,10 +770,12 @@ def build_report(args: argparse.Namespace) -> dict[str, Any]:
             l2=l2,
             regret_threshold=threshold,
             positive_weight=positive_weight,
+            consensus_min_models=consensus_min_models,
         )
         for l2 in default_l2_values(args.l2)
         for threshold in default_threshold_values(args.regret_threshold)
         for positive_weight in default_positive_weights(args.positive_weight)
+        for consensus_min_models in default_consensus_min_models(args.consensus_min_models)
     ]
     validation_scores = [
         validation_score(
@@ -706,6 +788,7 @@ def build_report(args: argparse.Namespace) -> dict[str, Any]:
             fallback_family=args.fallback_family,
             metric=args.metric,
             include_series=args.include_series,
+            consensus_mode=args.consensus_mode,
             max_fold_no_exposure=args.max_validation_fold_no_exposure,
         )
         for config in configs
@@ -728,6 +811,7 @@ def build_report(args: argparse.Namespace) -> dict[str, Any]:
             fallback_family=args.fallback_family,
             metric=args.metric,
             include_series=args.include_series,
+            consensus_mode=args.consensus_mode,
         )
         verdict = verdict_for_final(final_report)
 
@@ -740,6 +824,7 @@ def build_report(args: argparse.Namespace) -> dict[str, Any]:
         "metric": args.metric,
         "fallback_family": args.fallback_family,
         "include_series": args.include_series,
+        "consensus_mode": args.consensus_mode,
         "selection_gate": args.selection_gate,
         "initial_discovery_max_cut": args.initial_discovery_max_cut,
         "validation_cuts": validation_cuts,
@@ -747,6 +832,7 @@ def build_report(args: argparse.Namespace) -> dict[str, Any]:
         "l2_values": default_l2_values(args.l2),
         "regret_thresholds": default_threshold_values(args.regret_threshold),
         "positive_weights": default_positive_weights(args.positive_weight),
+        "consensus_min_models": default_consensus_min_models(args.consensus_min_models),
         "max_validation_fold_no_exposure": args.max_validation_fold_no_exposure,
         "utility_config": utility_config_summary(utility_config),
         "cuts": cuts,
@@ -792,6 +878,7 @@ def main() -> None:
         "output": str(output_path),
         "verdict": report["verdict"],
         "selection_gate": report["selection_gate"],
+        "consensus_mode": report["consensus_mode"],
         "validation_cuts": report["validation_cuts"],
         "discovery_examples": report["discovery_examples"],
         "final_train_examples": report["final_train_examples"],

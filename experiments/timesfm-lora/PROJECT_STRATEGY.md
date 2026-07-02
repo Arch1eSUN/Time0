@@ -109,6 +109,7 @@ strict supervised gate: fail-closed selection rejects all current supervised KNN
 logistic fallback probability: calibrated classifier finds loose validation-positive candidates, but strict fold-level gate rejects all configs
 expected-regret fallback veto: continuous regret regression increases loose validation-positive candidates, but strict fold-level and downside gates still reject all configs
 utility-aware expected-regret veto: validation utility scoring filters high-lift false positives, but no candidate reaches strict fold-level promotion
+temporal-prefix consensus veto: prefix-model agreement does not reduce fold regressions, so the next lever is failure attribution or new no-leak features
 zscore all-recent branch: fallback-sensitive
 ```
 
@@ -211,6 +212,16 @@ candidate is cleaner but still has one fold metric regression, so strict mode
 again returns `strict_gate_no_candidate` and keeps final holdout untouched.
 This confirms utility scoring is useful as a diagnostic, but the blocker is
 still generating candidates with zero fold metric regressions.
+
+Latest consensus diagnostic: temporal-prefix expected-regret models trained on
+discovery prefixes `3000/3250/3500` do not provide useful disagreement. Sweeping
+`consensus_min_models=2,3` doubles the no-series grid to 210 candidates, but
+both thresholds produce the same aggregate counts (`14` loose positives, `5`
+utility positives, `0` strict positives per threshold). Series-aware consensus
+also remains at `0` strict positives. Stop adding post-hoc gates on the same
+expected-regret surface; the next useful step is fold-regression attribution to
+identify which validation folds, series, families, and no-leak runtime features
+cause the remaining metric regressions.
 
 ## What Counts As Project Failure
 

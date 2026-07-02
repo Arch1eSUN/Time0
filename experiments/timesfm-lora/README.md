@@ -119,6 +119,7 @@ strict supervised gate: requiring zero fold metric regressions rejects all curre
 logistic fallback probability: calibrated probability improves the decision interface and finds loose validation-positive candidates, but strict validation still rejects all configs because fold metric regressions remain.
 expected-regret fallback veto: continuous regret regression finds more aggregate-positive validation candidates, but strict validation still rejects all configs because fold and downside regressions remain.
 utility-aware expected-regret veto: risk-adjusted validation scoring filters loose positives from 14 -> 5 no-series and 7 -> 0 series-aware, while strict validation still blocks final holdout.
+temporal-prefix consensus veto: multiple expected-regret prefix models agree too strongly to filter the remaining fold regressions; strict validation still has 0 candidates.
 ```
 
 ## Data Contract
