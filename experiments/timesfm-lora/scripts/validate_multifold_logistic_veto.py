@@ -96,7 +96,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--false-positive-weight", type=float, action="append")
     parser.add_argument(
         "--training-weighting",
-        choices=["global-label-balanced", "cut-label-balanced", "time-bin-label-balanced"],
+        choices=[
+            "global-label-balanced",
+            "cut-label-balanced",
+            "time-bin-label-balanced",
+            "margin-label-balanced",
+            "time-bin-margin-balanced",
+        ],
         action="append",
     )
     parser.add_argument("--training-time-bins", type=int, default=3)
@@ -159,6 +165,25 @@ def default_training_weightings(requested: list[str] | None) -> list[str]:
         if value not in values:
             values.append(value)
     return values
+
+
+def example_margin_summary(examples: list[VetoExample]) -> dict[str, Any]:
+    if not examples:
+        return {
+            "examples": 0,
+            "fallback_better": 0,
+            "selected_better": 0,
+        }
+    margins = np.asarray([abs(example.regret_vs_fallback) for example in examples], dtype=float)
+    return {
+        "examples": len(examples),
+        "fallback_better": sum(example.regret_vs_fallback > 0.0 for example in examples),
+        "selected_better": sum(example.regret_vs_fallback <= 0.0 for example in examples),
+        "mean_abs_regret": float(margins.mean()),
+        "median_abs_regret": float(np.median(margins)),
+        "p90_abs_regret": float(np.quantile(margins, 0.9)),
+        "max_abs_regret": float(margins.max()),
+    }
 
 
 def config_summary(config: LogisticVetoConfig) -> dict[str, Any]:
@@ -279,9 +304,28 @@ def balanced_sample_weights(labels: np.ndarray) -> np.ndarray:
     return np.where(labels > 0.5, positive_weight, negative_weight)
 
 
+def normalized_weights(weights: np.ndarray) -> np.ndarray:
+    mean_weight = float(weights.mean())
+    if mean_weight <= 0.0:
+        return np.ones_like(weights)
+    return weights / mean_weight
+
+
 def false_positive_sample_weights(labels: np.ndarray, false_positive_weight: float) -> np.ndarray:
     balanced_weights = balanced_sample_weights(labels)
     return np.where(labels > 0.5, balanced_weights, balanced_weights * false_positive_weight)
+
+
+def margin_sample_weights(examples: list[VetoExample], min_weight: float = 0.25, max_weight: float = 4.0) -> np.ndarray:
+    margins = np.asarray([abs(example.regret_vs_fallback) for example in examples], dtype=float)
+    nonzero_margins = margins[margins > 0.0]
+    if len(nonzero_margins) == 0:
+        return np.ones_like(margins)
+    median_margin = float(np.median(nonzero_margins))
+    if median_margin <= 0.0:
+        return np.ones_like(margins)
+    bounded_weights = np.clip(margins / median_margin, min_weight, max_weight)
+    return normalized_weights(bounded_weights)
 
 
 def cut_label_balanced_sample_weights(examples: list[VetoExample], labels: np.ndarray) -> np.ndarray:
@@ -318,15 +362,20 @@ def group_label_balanced_sample_weights(groups: list[tuple[int, ...]], labels: n
             weights[index] = negative_mass / len(negative_indices)
         if group_indices and weights[group_indices].sum() == 0.0:
             weights[group_indices] = group_mass / len(group_indices)
-    mean_weight = float(weights.mean())
-    if mean_weight <= 0.0:
-        return np.ones_like(labels)
-    return weights / mean_weight
+    return normalized_weights(weights)
 
 
 def sample_weights_for_examples(
     examples: list[VetoExample], labels: np.ndarray, config: LogisticVetoConfig
 ) -> np.ndarray:
+    margin_weights = margin_sample_weights(examples)
+    if config.training_weighting == "time-bin-margin-balanced":
+        balanced_weights = time_bin_label_balanced_sample_weights(examples, labels, config.training_time_bins)
+        class_weights = np.where(labels > 0.5, balanced_weights, balanced_weights * config.false_positive_weight)
+        return normalized_weights(class_weights * margin_weights)
+    if config.training_weighting == "margin-label-balanced":
+        class_weights = false_positive_sample_weights(labels, config.false_positive_weight)
+        return normalized_weights(class_weights * margin_weights)
     if config.training_weighting == "time-bin-label-balanced":
         balanced_weights = time_bin_label_balanced_sample_weights(examples, labels, config.training_time_bins)
         return np.where(labels > 0.5, balanced_weights, balanced_weights * config.false_positive_weight)
@@ -932,11 +981,13 @@ def build_report(args: argparse.Namespace) -> dict[str, Any]:
         "cuts": cuts,
         "routed_rows": len(routed_rows),
         "discovery_examples": len(discovery_examples),
+        "discovery_example_margin_summary": example_margin_summary(discovery_examples),
         "discovery_example_cut_summary": example_cut_label_summary(discovery_examples),
         "discovery_example_time_bin_summary": example_time_bin_label_summary(
             discovery_examples, args.training_time_bins
         ),
         "final_train_examples": len(final_train_examples),
+        "final_train_example_margin_summary": example_margin_summary(final_train_examples),
         "final_train_example_cut_summary": example_cut_label_summary(final_train_examples),
         "final_train_example_time_bin_summary": example_time_bin_label_summary(
             final_train_examples, args.training_time_bins
