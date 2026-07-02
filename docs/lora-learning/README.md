@@ -60,3 +60,4 @@ Each note should answer four questions:
 - [047 - Fallback Sensitivity Guard](./047-fallback-sensitivity-guard.md)
 - [048 - Finance Readiness Stop Gate](./048-finance-readiness-stop-gate.md)
 - [049 - Series Downside Veto](./049-series-downside-veto.md)
+- [050 - Series Risk Objective](./050-series-risk-objective.md)

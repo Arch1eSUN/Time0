@@ -47,6 +47,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--regret-threshold", type=float, action="append")
     parser.add_argument("--series-downside-threshold", type=float, action="append")
     parser.add_argument("--series-family-downside-threshold", type=float, action="append")
+    parser.add_argument("--series-risk-penalty", type=float, action="append")
     parser.add_argument("--feature-mode", choices=["global", "series"], action="append")
     return parser.parse_args()
 
@@ -134,9 +135,22 @@ def series_delta_summary(
         )
     positive = [item for item in summaries if item["delta_vs_fallback_sum"] > 0.0]
     negative = [item for item in summaries if item["delta_vs_fallback_sum"] < 0.0]
+    negative_delta_sum = sum(float(item["delta_vs_fallback_sum"]) for item in negative)
+    total_windows = sum(int(item["windows"]) for item in summaries)
+    worst_negative_series_mean = (
+        min(float(item["delta_vs_fallback_mean"]) for item in negative)
+        if negative
+        else 0.0
+    )
     return {
+        "series_count": len(summaries),
+        "routed_windows": total_windows,
         "positive_routed_series_count": len(positive),
         "negative_routed_series_count": len(negative),
+        "negative_delta_sum": negative_delta_sum,
+        "negative_delta_abs_sum": abs(negative_delta_sum),
+        "downside_mass_per_window": abs(negative_delta_sum) / total_windows if total_windows else 0.0,
+        "worst_negative_series_mean": worst_negative_series_mean,
         "top_positive_series": sorted(
             positive,
             key=lambda item: float(item["delta_vs_fallback_sum"]),
@@ -344,11 +358,48 @@ def with_delta(policy: dict[str, Any], fallback_metric: float) -> dict[str, Any]
         "relative_lift_vs_fallback": improvement(fallback_metric, selected_metric),
         "selected_counts": routed["selected_counts"],
         "vetoed_windows": policy.get("vetoed_windows", 0),
+        "series_count": series_summary["series_count"],
+        "routed_windows": series_summary["routed_windows"],
         "positive_routed_series_count": series_summary["positive_routed_series_count"],
         "negative_routed_series_count": series_summary["negative_routed_series_count"],
+        "negative_delta_sum": series_summary["negative_delta_sum"],
+        "negative_delta_abs_sum": series_summary["negative_delta_abs_sum"],
+        "downside_mass_per_window": series_summary["downside_mass_per_window"],
+        "worst_negative_series_mean": series_summary["worst_negative_series_mean"],
         "top_positive_series": series_summary["top_positive_series"],
         "top_negative_series": series_summary["top_negative_series"],
     }
+
+
+def risk_adjusted_summary(policy: dict[str, Any], penalty: float) -> dict[str, Any]:
+    return {
+        **policy,
+        "series_risk_penalty": penalty,
+        "risk_adjusted_score": float(policy["delta_vs_fallback"])
+        - penalty * float(policy["downside_mass_per_window"]),
+    }
+
+
+def compact_policy_summary(policy: dict[str, Any] | None) -> dict[str, Any] | None:
+    if policy is None:
+        return None
+    compact = {
+        "feature_mode": policy.get("feature_mode"),
+        "k": policy.get("k"),
+        "regret_threshold": policy.get("regret_threshold"),
+        "series_downside_threshold": policy.get("series_downside_threshold"),
+        "series_family_downside_threshold": policy.get("series_family_downside_threshold"),
+        "delta_vs_fallback": policy.get("delta_vs_fallback"),
+        "relative_lift_vs_fallback": policy.get("relative_lift_vs_fallback"),
+        "positive_routed_series_count": policy.get("positive_routed_series_count"),
+        "negative_routed_series_count": policy.get("negative_routed_series_count"),
+        "downside_mass_per_window": policy.get("downside_mass_per_window"),
+        "vetoed_windows": policy.get("vetoed_windows"),
+    }
+    if "series_risk_penalty" in policy:
+        compact["series_risk_penalty"] = policy["series_risk_penalty"]
+        compact["risk_adjusted_score"] = policy["risk_adjusted_score"]
+    return compact
 
 
 def build_report(args: argparse.Namespace) -> dict[str, Any]:
@@ -376,6 +427,7 @@ def build_report(args: argparse.Namespace) -> dict[str, Any]:
         if args.series_family_downside_threshold is not None
         else [None]
     )
+    series_risk_penalties = args.series_risk_penalty or [1.0, 2.0, 5.0, 10.0, 50.0, 100.0]
     feature_modes = args.feature_mode or ["global", "series"]
 
     base_selections = base_selection_by_cut(
@@ -444,6 +496,20 @@ def build_report(args: argparse.Namespace) -> dict[str, Any]:
         if no_negative_series
         else None
     )
+    best_by_negative_count_then_delta = max(
+        veto_summaries,
+        key=lambda item: (
+            -int(item["negative_routed_series_count"]),
+            float(item["delta_vs_fallback"]),
+        ),
+    )
+    risk_objective = {
+        f"{penalty:g}": max(
+            (risk_adjusted_summary(item, penalty) for item in veto_summaries),
+            key=lambda item: float(item["risk_adjusted_score"]),
+        )
+        for penalty in series_risk_penalties
+    }
 
     return {
         "method": "no_leak_router_fallback_veto",
@@ -468,6 +534,8 @@ def build_report(args: argparse.Namespace) -> dict[str, Any]:
             "best_veto_by_delta": best_by_delta,
             "best_veto_by_series_spread": best_by_series_spread,
             "best_no_negative_series": best_no_negative_series,
+            "best_by_negative_count_then_delta": best_by_negative_count_then_delta,
+            "risk_objective": risk_objective,
             "top_veto_rows": sorted(
                 veto_summaries,
                 key=lambda item: float(item["delta_vs_fallback"]),
@@ -488,10 +556,21 @@ def main() -> None:
             {
                 "output": str(output_path),
                 "rows": report["rows"],
-                "baseline": report["summary"]["baseline"],
-                "best_veto_by_delta": report["summary"]["best_veto_by_delta"],
-                "best_veto_by_series_spread": report["summary"]["best_veto_by_series_spread"],
-                "best_no_negative_series": report["summary"]["best_no_negative_series"],
+                "baseline": compact_policy_summary(report["summary"]["baseline"]),
+                "best_veto_by_delta": compact_policy_summary(report["summary"]["best_veto_by_delta"]),
+                "best_veto_by_series_spread": compact_policy_summary(
+                    report["summary"]["best_veto_by_series_spread"]
+                ),
+                "best_no_negative_series": compact_policy_summary(
+                    report["summary"]["best_no_negative_series"]
+                ),
+                "best_by_negative_count_then_delta": compact_policy_summary(
+                    report["summary"]["best_by_negative_count_then_delta"]
+                ),
+                "risk_objective": {
+                    penalty: compact_policy_summary(policy)
+                    for penalty, policy in report["summary"]["risk_objective"].items()
+                },
             },
             indent=2,
         )

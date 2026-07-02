@@ -105,6 +105,7 @@ zscore all-recent pool: five-family oracle headroom increases, but MAE routing s
 fallback sensitivity guard: zscore recent2000 SMAPE is partial-positive, while the wider all-recent pool is fallback-sensitive and remains blocked.
 finance readiness gate: continue research; fixed recent2000 averages 1.724% MAE lift, but release needs 2.000% and the best router still has 2 negative series.
 series-downside veto: strict series-level downside control improves router extra lift to 0.319% and reduces negative series from 3 to 2, but release remains blocked.
+series-risk objective: ordinary downside penalties keep the 0.319% / 2-negative-series policy; extreme penalties reduce downside mass but lower lift to 0.264% and increase negative series to 3.
 ```
 
 ## Data Contract
