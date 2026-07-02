@@ -40,6 +40,7 @@ MetricName = str
 class LogisticVetoConfig:
     l2: float
     probability_threshold: float
+    false_positive_weight: float
     learning_rate: float
     steps: int
 
@@ -90,6 +91,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--final-holdout-min-cut", type=int, default=4250)
     parser.add_argument("--l2", type=float, action="append")
     parser.add_argument("--probability-threshold", type=float, action="append")
+    parser.add_argument("--false-positive-weight", type=float, action="append")
     parser.add_argument("--learning-rate", type=float, default=0.05)
     parser.add_argument("--steps", type=int, default=1200)
     parser.add_argument("--max-validation-fold-no-exposure", type=int, default=0)
@@ -116,11 +118,21 @@ def default_threshold_values(requested: list[float] | None) -> list[float]:
     return values
 
 
+def default_false_positive_weights(requested: list[float] | None) -> list[float]:
+    raw_values = requested or [1.0]
+    values: list[float] = []
+    for value in raw_values:
+        if value > 0.0 and value not in values:
+            values.append(value)
+    return values
+
+
 def config_summary(config: LogisticVetoConfig) -> dict[str, Any]:
     return {
         "model": "logistic_fallback_veto",
         "l2": config.l2,
         "probability_threshold": config.probability_threshold,
+        "false_positive_weight": config.false_positive_weight,
         "learning_rate": config.learning_rate,
         "steps": config.steps,
     }
@@ -130,6 +142,7 @@ def config_from_summary(payload: dict[str, Any]) -> LogisticVetoConfig:
     return LogisticVetoConfig(
         l2=float(payload["l2"]),
         probability_threshold=float(payload["probability_threshold"]),
+        false_positive_weight=float(payload.get("false_positive_weight", 1.0)),
         learning_rate=float(payload["learning_rate"]),
         steps=int(payload["steps"]),
     )
@@ -154,6 +167,11 @@ def balanced_sample_weights(labels: np.ndarray) -> np.ndarray:
     positive_weight = 0.5 / positive_rate
     negative_weight = 0.5 / (1.0 - positive_rate)
     return np.where(labels > 0.5, positive_weight, negative_weight)
+
+
+def false_positive_sample_weights(labels: np.ndarray, false_positive_weight: float) -> np.ndarray:
+    balanced_weights = balanced_sample_weights(labels)
+    return np.where(labels > 0.5, balanced_weights, balanced_weights * false_positive_weight)
 
 
 def logistic_loss(probabilities: np.ndarray, labels: np.ndarray, weights: np.ndarray, model_weights: np.ndarray, l2: float) -> float:
@@ -189,7 +207,7 @@ def train_logistic_model(
     scale = np.nanstd(matrix, axis=0)
     scale = np.where(scale < 1e-8, 1.0, scale)
     features = normalized_matrix(matrix, mean, scale)
-    sample_weights = balanced_sample_weights(labels)
+    sample_weights = false_positive_sample_weights(labels, config.false_positive_weight)
     model_weights = np.zeros(features.shape[1], dtype=float)
     bias = 0.0
 
@@ -620,11 +638,13 @@ def build_report(args: argparse.Namespace) -> dict[str, Any]:
         LogisticVetoConfig(
             l2=l2,
             probability_threshold=threshold,
+            false_positive_weight=false_positive_weight,
             learning_rate=args.learning_rate,
             steps=args.steps,
         )
         for l2 in default_l2_values(args.l2)
         for threshold in default_threshold_values(args.probability_threshold)
+        for false_positive_weight in default_false_positive_weights(args.false_positive_weight)
     ]
     validation_scores = [
         validation_score(
@@ -675,8 +695,10 @@ def build_report(args: argparse.Namespace) -> dict[str, Any]:
         "final_holdout_min_cut": args.final_holdout_min_cut,
         "l2_values": default_l2_values(args.l2),
         "probability_thresholds": default_threshold_values(args.probability_threshold),
+        "false_positive_weights": default_false_positive_weights(args.false_positive_weight),
         "learning_rate": args.learning_rate,
         "steps": args.steps,
+        "training_target": "fallback_better_probability_with_false_positive_penalty",
         "max_validation_fold_no_exposure": args.max_validation_fold_no_exposure,
         "cuts": cuts,
         "routed_rows": len(routed_rows),
@@ -697,8 +719,9 @@ def build_report(args: argparse.Namespace) -> dict[str, Any]:
         "verdict": verdict,
         "guardrail": (
             "Logistic fallback-veto probabilities are trained on discovery override "
-            "examples, selected on chronological validation folds, and strict mode "
-            "fails closed before final holdout when no candidate avoids fold metric/downside regressions."
+            "examples with optional extra weight on harmful-veto labels, selected "
+            "on chronological validation folds, and strict mode fails closed before "
+            "final holdout when no candidate avoids fold metric/downside regressions."
         ),
     }
 

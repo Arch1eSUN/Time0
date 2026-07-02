@@ -113,6 +113,7 @@ temporal-prefix consensus veto: prefix-model agreement does not reduce fold regr
 fold-regression attribution: strict failures localize to specific folds/series/families, and prediction-context alignment features are the next feature-surface lever
 alignment-risk feature surface: raw derived alignment-risk features remain strict-blocked and do not beat base in robust final diagnostics, so the next lever is smaller or more regularized alignment input
 alignment-compact feature surface: compact alignment features and strong L2 both remain strict-blocked; the next lever is an abstention/calibration target rather than more alignment columns
+false-positive logistic penalty: cost-sensitive logistic training produces no-series strict-positive candidates, but final holdout fails because exposure is tiny; the next lever is a minimum-exposure promotion gate
 zscore all-recent branch: fallback-sensitive
 ```
 
@@ -261,6 +262,19 @@ no-series, `0` include-series) and still have `0` strict-positive candidates.
 Stop expanding alignment features in the current expected-regret ridge form.
 The next useful step is an abstention-aware or false-positive-penalized target
 that learns when not to veto cut4000-like windows.
+
+Latest false-positive penalty diagnostic: adding `--false-positive-weight`
+keeps default logistic behavior unchanged at weight `1.0`, then upweights
+harmful-veto labels in the penalty grid. No-series logistic now produces `7`
+strict-positive candidates, the first strict-positive logistic result, with
+selected config `l2=0.001`, `probability_threshold=0.5`,
+`false_positive_weight=8.0`. The selected validation folds all improve, but the
+exposure is tiny (`1`, `3`, and `11` changed windows). Final holdout evaluates
+only `6` changed windows and regresses (`final_metric_delta=-0.0000069200`), so
+the verdict is `not_promotable`. Include-series remains strict-blocked; robust
+mode selects a no-future-exposure policy. Keep false-positive weighting as a
+useful target lever, but add a minimum-exposure gate before treating strict
+validation as promotion evidence.
 
 ## What Counts As Project Failure
 

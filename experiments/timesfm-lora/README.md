@@ -123,6 +123,7 @@ temporal-prefix consensus veto: multiple expected-regret prefix models agree too
 fold-regression attribution: no-series failure localizes to cut3750/VIXCLS/recent3000 vetoes; series-aware failure localizes to cut4000/DFF/recent1500 vetoes, with prediction-context alignment features separating harmed from helped windows.
 alignment-risk feature surface: raw derived alignment-risk features do not pass strict validation and underperform base in robust final diagnostics; keep the surface experimental and test smaller or more regularized variants next.
 alignment-compact feature surface: compacting alignment features improves no-series versus raw alignment-risk but still loses to base, while strong L2 suppresses useful exposure; stop expanding alignment columns in the current expected-regret ridge form.
+false-positive logistic penalty: cost-sensitive logistic training creates the first no-series strict-positive candidates, but the selected policy has tiny validation/final exposure and hurts final holdout; strict validation needs a minimum-exposure gate next.
 ```
 
 ## Data Contract
