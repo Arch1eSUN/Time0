@@ -13,7 +13,14 @@ from evaluate_prediction_router import (
     rows_by_cut,
     selection_metrics,
 )
-from router_fallback_veto import apply_neighbor_regret_veto, historical_veto_examples
+from router_fallback_veto import (
+    apply_neighbor_regret_veto,
+    apply_series_downside_veto,
+    apply_series_family_downside_veto,
+    historical_series_delta_summary,
+    historical_series_family_delta_summary,
+    historical_veto_examples,
+)
 from summarize_router_attribution import selection_for_cut
 
 
@@ -38,6 +45,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--softmax-steps", type=int, default=2000)
     parser.add_argument("--veto-k", type=int, action="append")
     parser.add_argument("--regret-threshold", type=float, action="append")
+    parser.add_argument("--series-downside-threshold", type=float, action="append")
+    parser.add_argument("--series-family-downside-threshold", type=float, action="append")
     parser.add_argument("--feature-mode", choices=["global", "series"], action="append")
     return parser.parse_args()
 
@@ -148,6 +157,8 @@ def evaluate_veto_config(
     include_series: bool,
     k: int,
     regret_threshold: float,
+    series_downside_threshold: float | None,
+    series_family_downside_threshold: float | None,
 ) -> dict[str, Any]:
     per_cut: list[dict[str, Any]] = []
     for cut in cuts:
@@ -161,7 +172,7 @@ def evaluate_veto_config(
             fallback_family=fallback_family,
             metric=metric,
         )
-        selected, veto_report = apply_neighbor_regret_veto(
+        selected, neighbor_veto_report = apply_neighbor_regret_veto(
             eval_rows=eval_rows,
             selected_families=base_selected,
             examples=examples,
@@ -171,6 +182,55 @@ def evaluate_veto_config(
             k=k,
             regret_threshold=regret_threshold,
         )
+        series_downside_report = None
+        if series_downside_threshold is not None:
+            series_summary = historical_series_delta_summary(
+                prior_cuts=prior_cuts,
+                cut_rows=cut_rows,
+                base_selections=base_selections,
+                fallback_family=fallback_family,
+                metric=metric,
+            )
+            selected, series_downside_report = apply_series_downside_veto(
+                eval_rows=eval_rows,
+                selected_families=selected,
+                series_summary=series_summary,
+                fallback_family=fallback_family,
+                min_series_delta=series_downside_threshold,
+            )
+        series_family_downside_report = None
+        if series_family_downside_threshold is not None:
+            series_family_summary = historical_series_family_delta_summary(
+                prior_cuts=prior_cuts,
+                cut_rows=cut_rows,
+                base_selections=base_selections,
+                fallback_family=fallback_family,
+                metric=metric,
+            )
+            selected, series_family_downside_report = apply_series_family_downside_veto(
+                eval_rows=eval_rows,
+                selected_families=selected,
+                series_family_summary=series_family_summary,
+                fallback_family=fallback_family,
+                min_series_family_delta=series_family_downside_threshold,
+            )
+        total_vetoed_windows = sum(
+            1
+            for base_family, selected_family in zip(base_selected, selected)
+            if base_family != fallback_family and selected_family == fallback_family
+        )
+        veto_report = {
+            "mode": (
+                "neighbor_regret_veto_with_series_downside"
+                if series_downside_threshold is not None
+                or series_family_downside_threshold is not None
+                else neighbor_veto_report["mode"]
+            ),
+            "neighbor": neighbor_veto_report,
+            "series_downside": series_downside_report,
+            "series_family_downside": series_family_downside_report,
+            "vetoed_windows": total_vetoed_windows,
+        }
         metrics = selection_metrics(rows=eval_rows, selected_families=selected, families=families, metric=metric)
         per_cut.append(
             {
@@ -205,6 +265,8 @@ def evaluate_veto_config(
         "feature_mode": "series" if include_series else "global",
         "k": k,
         "regret_threshold": regret_threshold,
+        "series_downside_threshold": series_downside_threshold,
+        "series_family_downside_threshold": series_family_downside_threshold,
         "all_cuts": all_metrics,
         "routed_cuts_only": routed_metrics,
         "series_summary": series_summary,
@@ -275,6 +337,8 @@ def with_delta(policy: dict[str, Any], fallback_metric: float) -> dict[str, Any]
         "feature_mode": policy.get("feature_mode", "none"),
         "k": policy.get("k"),
         "regret_threshold": policy.get("regret_threshold"),
+        "series_downside_threshold": policy.get("series_downside_threshold"),
+        "series_family_downside_threshold": policy.get("series_family_downside_threshold"),
         "selected_metric": selected_metric,
         "delta_vs_fallback": fallback_metric - selected_metric,
         "relative_lift_vs_fallback": improvement(fallback_metric, selected_metric),
@@ -303,6 +367,14 @@ def build_report(args: argparse.Namespace) -> dict[str, Any]:
     veto_ks = args.veto_k or [25, 50, 100]
     regret_thresholds = (
         args.regret_threshold if args.regret_threshold is not None else [-0.0001, 0.0, 0.00005, 0.0001]
+    )
+    series_downside_thresholds = (
+        args.series_downside_threshold if args.series_downside_threshold is not None else [None]
+    )
+    series_family_downside_thresholds = (
+        args.series_family_downside_threshold
+        if args.series_family_downside_threshold is not None
+        else [None]
     )
     feature_modes = args.feature_mode or ["global", "series"]
 
@@ -338,19 +410,23 @@ def build_report(args: argparse.Namespace) -> dict[str, Any]:
     for feature_mode in feature_modes:
         for k in veto_ks:
             for regret_threshold in regret_thresholds:
-                veto_policies.append(
-                    evaluate_veto_config(
-                        cuts=cuts,
-                        cut_rows=cut_rows,
-                        base_selections=base_selections,
-                        families=families,
-                        metric=args.metric,
-                        fallback_family=args.fallback_family,
-                        include_series=feature_mode == "series",
-                        k=k,
-                        regret_threshold=regret_threshold,
-                    )
-                )
+                for series_downside_threshold in series_downside_thresholds:
+                    for series_family_downside_threshold in series_family_downside_thresholds:
+                        veto_policies.append(
+                            evaluate_veto_config(
+                                cuts=cuts,
+                                cut_rows=cut_rows,
+                                base_selections=base_selections,
+                                families=families,
+                                metric=args.metric,
+                                fallback_family=args.fallback_family,
+                                include_series=feature_mode == "series",
+                                k=k,
+                                regret_threshold=regret_threshold,
+                                series_downside_threshold=series_downside_threshold,
+                                series_family_downside_threshold=series_family_downside_threshold,
+                            )
+                        )
 
     base_summary = with_delta(base, float(fallback_metric))
     veto_summaries = [with_delta(policy, float(fallback_metric)) for policy in veto_policies]
@@ -361,6 +437,12 @@ def build_report(args: argparse.Namespace) -> dict[str, Any]:
             int(item["positive_routed_series_count"]) - int(item["negative_routed_series_count"]),
             float(item["delta_vs_fallback"]),
         ),
+    )
+    no_negative_series = [item for item in veto_summaries if int(item["negative_routed_series_count"]) == 0]
+    best_no_negative_series = (
+        max(no_negative_series, key=lambda item: float(item["delta_vs_fallback"]))
+        if no_negative_series
+        else None
     )
 
     return {
@@ -385,6 +467,7 @@ def build_report(args: argparse.Namespace) -> dict[str, Any]:
             "baseline": base_summary,
             "best_veto_by_delta": best_by_delta,
             "best_veto_by_series_spread": best_by_series_spread,
+            "best_no_negative_series": best_no_negative_series,
             "top_veto_rows": sorted(
                 veto_summaries,
                 key=lambda item: float(item["delta_vs_fallback"]),
@@ -408,6 +491,7 @@ def main() -> None:
                 "baseline": report["summary"]["baseline"],
                 "best_veto_by_delta": report["summary"]["best_veto_by_delta"],
                 "best_veto_by_series_spread": report["summary"]["best_veto_by_series_spread"],
+                "best_no_negative_series": report["summary"]["best_no_negative_series"],
             },
             indent=2,
         )

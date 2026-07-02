@@ -22,8 +22,8 @@ specialize TimesFM 2.5 for 20-step market/macro realized-volatility forecasting 
 |---|---:|---:|---|
 | `fixed_average_mae_lift` | 2.000% | 1.724% | False |
 | `fixed_positive_cut_count` | 3 | 3 | True |
-| `router_extra_lift_vs_fallback` | 0.200% | 0.316% | True |
-| `router_negative_series` | 0 | 3 | False |
+| `router_extra_lift_vs_fallback` | 0.200% | 0.319% | True |
+| `router_negative_series` | 0 | 2 | False |
 | `zscore_fallback_sensitivity` | no fallback_sensitive verdicts in checked zscore reports | partial_positive, fallback_sensitive, fallback_sensitive | False |
 
 ## Fixed Adapter Evidence
@@ -48,10 +48,10 @@ Fallback family: `recent2000`
 
 | Router checkpoint | Value |
 |---|---:|
-| extra lift vs fallback | 0.316% |
-| delta vs fallback | 0.0002912377 |
-| positive / negative series | 7 / 3 |
-| vetoed windows | 376 |
+| extra lift vs fallback | 0.319% |
+| delta vs fallback | 0.0002931205 |
+| positive / negative series | 8 / 2 |
+| vetoed windows | 1378 |
 
 ## Sensitivity Evidence
 

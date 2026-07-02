@@ -93,8 +93,8 @@ Reason:
 
 ```text
 fixed recent2000 average MAE lift: 1.724% < 2.000% release gate
-best router extra lift vs fallback: 0.316%
-best router negative series: 3 > 0 release gate
+best router extra lift vs fallback: 0.319%
+best router negative series: 2 > 0 release gate
 zscore all-recent branch: fallback-sensitive
 ```
 

@@ -59,3 +59,4 @@ Each note should answer four questions:
 - [046 - Z-Score Candidate Pool Risk](./046-zscore-candidate-pool-risk.md)
 - [047 - Fallback Sensitivity Guard](./047-fallback-sensitivity-guard.md)
 - [048 - Finance Readiness Stop Gate](./048-finance-readiness-stop-gate.md)
+- [049 - Series Downside Veto](./049-series-downside-veto.md)

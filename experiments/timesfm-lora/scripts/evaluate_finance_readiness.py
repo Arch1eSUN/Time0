@@ -45,7 +45,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--router-report",
         default=(
-            "reports/router-fallback-veto-knn-regret-mvl005-alignment-normalized-"
+            "reports/router-fallback-veto-series-downside-strict-alignment-normalized-"
             "market-macro-realized-vol-20-h20-r4.json"
         ),
     )

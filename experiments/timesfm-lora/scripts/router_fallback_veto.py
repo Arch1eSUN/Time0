@@ -50,6 +50,141 @@ def historical_veto_examples(
     return examples
 
 
+def historical_series_delta_summary(
+    *,
+    prior_cuts: list[int],
+    cut_rows: dict[int, list[dict[str, Any]]],
+    base_selections: dict[int, dict[str, Any]],
+    fallback_family: str,
+    metric: MetricName,
+) -> dict[str, dict[str, float]]:
+    grouped: dict[str, list[float]] = {}
+    for cut in prior_cuts:
+        selected_families = base_selections[cut]["selected_families"]
+        for row, selected_family in zip(cut_rows[cut], selected_families):
+            if selected_family == fallback_family:
+                continue
+            series_id = str(row["series_id"])
+            selected_error = family_error(row, selected_family, metric)
+            fallback_error = family_error(row, fallback_family, metric)
+            grouped.setdefault(series_id, []).append(fallback_error - selected_error)
+
+    summary: dict[str, dict[str, float]] = {}
+    for series_id, deltas in grouped.items():
+        summary[series_id] = {
+            "windows": len(deltas),
+            "mean_delta_vs_fallback": mean(deltas),
+            "sum_delta_vs_fallback": sum(deltas),
+            "harm_rate": sum(delta < 0.0 for delta in deltas) / len(deltas),
+        }
+    return summary
+
+
+def historical_series_family_delta_summary(
+    *,
+    prior_cuts: list[int],
+    cut_rows: dict[int, list[dict[str, Any]]],
+    base_selections: dict[int, dict[str, Any]],
+    fallback_family: str,
+    metric: MetricName,
+) -> dict[str, dict[str, dict[str, float]]]:
+    grouped: dict[str, dict[str, list[float]]] = {}
+    for cut in prior_cuts:
+        selected_families = base_selections[cut]["selected_families"]
+        for row, selected_family in zip(cut_rows[cut], selected_families):
+            if selected_family == fallback_family:
+                continue
+            series_id = str(row["series_id"])
+            selected_error = family_error(row, selected_family, metric)
+            fallback_error = family_error(row, fallback_family, metric)
+            grouped.setdefault(series_id, {}).setdefault(selected_family, []).append(
+                fallback_error - selected_error
+            )
+
+    summary: dict[str, dict[str, dict[str, float]]] = {}
+    for series_id, family_deltas in grouped.items():
+        summary[series_id] = {}
+        for family, deltas in family_deltas.items():
+            summary[series_id][family] = {
+                "windows": len(deltas),
+                "mean_delta_vs_fallback": mean(deltas),
+                "sum_delta_vs_fallback": sum(deltas),
+                "harm_rate": sum(delta < 0.0 for delta in deltas) / len(deltas),
+            }
+    return summary
+
+
+def apply_series_downside_veto(
+    *,
+    eval_rows: list[dict[str, Any]],
+    selected_families: list[str],
+    series_summary: dict[str, dict[str, float]],
+    fallback_family: str,
+    min_series_delta: float,
+) -> tuple[list[str], dict[str, Any]]:
+    vetoed = list(selected_families)
+    current_overrides = 0
+    vetoed_windows = 0
+    vetoed_by_series: dict[str, int] = {}
+    for index, (row, selected_family) in enumerate(zip(eval_rows, selected_families)):
+        if selected_family == fallback_family:
+            continue
+        current_overrides += 1
+        series_id = str(row["series_id"])
+        stats = series_summary.get(series_id)
+        if stats is None:
+            continue
+        if float(stats["mean_delta_vs_fallback"]) <= min_series_delta:
+            vetoed[index] = fallback_family
+            vetoed_windows += 1
+            vetoed_by_series[series_id] = vetoed_by_series.get(series_id, 0) + 1
+
+    return vetoed, {
+        "mode": "series_downside_veto",
+        "historical_series": len(series_summary),
+        "current_overrides": current_overrides,
+        "min_series_delta": min_series_delta,
+        "vetoed_windows": vetoed_windows,
+        "vetoed_by_series": dict(sorted(vetoed_by_series.items())),
+    }
+
+
+def apply_series_family_downside_veto(
+    *,
+    eval_rows: list[dict[str, Any]],
+    selected_families: list[str],
+    series_family_summary: dict[str, dict[str, dict[str, float]]],
+    fallback_family: str,
+    min_series_family_delta: float,
+) -> tuple[list[str], dict[str, Any]]:
+    vetoed = list(selected_families)
+    current_overrides = 0
+    vetoed_windows = 0
+    vetoed_by_series_family: dict[str, int] = {}
+    for index, (row, selected_family) in enumerate(zip(eval_rows, selected_families)):
+        if selected_family == fallback_family:
+            continue
+        current_overrides += 1
+        series_id = str(row["series_id"])
+        stats = series_family_summary.get(series_id, {}).get(selected_family)
+        if stats is None:
+            continue
+        if float(stats["mean_delta_vs_fallback"]) <= min_series_family_delta:
+            vetoed[index] = fallback_family
+            vetoed_windows += 1
+            key = f"{series_id}|{selected_family}"
+            vetoed_by_series_family[key] = vetoed_by_series_family.get(key, 0) + 1
+
+    return vetoed, {
+        "mode": "series_family_downside_veto",
+        "historical_series": len(series_family_summary),
+        "current_overrides": current_overrides,
+        "min_series_family_delta": min_series_family_delta,
+        "vetoed_windows": vetoed_windows,
+        "vetoed_by_series_family": dict(sorted(vetoed_by_series_family.items())),
+    }
+
+
 def selected_family_matrix(selected_families: list[str], families: list[str]) -> np.ndarray:
     matrix = np.zeros((len(selected_families), len(families)), dtype=float)
     family_index = {family: index for index, family in enumerate(families)}
